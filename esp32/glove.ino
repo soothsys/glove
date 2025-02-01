@@ -24,6 +24,7 @@
 
 #define BLE_SERVER_NAME		"SmartGlove"
 
+BLEAdvertising *pAdvert = NULL;
 bool m_deviceConnected = false;
 
 class MyServerCallbacks: public BLEServerCallbacks {
@@ -35,6 +36,9 @@ class MyServerCallbacks: public BLEServerCallbacks {
 	void onDisconnect(BLEServer *pServer) {
 		m_deviceConnected = false;
 		Serial.println("Client disconnected");
+    if (pAdvert != NULL) {
+      pAdvert->start(); //Resume advertising for next client
+    }
 	}
 };
 
@@ -63,7 +67,7 @@ void setup(void) {
 		ERROR("Failed to add BME688 services");
 	}
 	
-	BLEAdvertising *pAdvert = pServer->getAdvertising();
+	pAdvert = pServer->getAdvertising();
 	if (pAdvert == NULL) {
 		ERROR_HALT("Failed to start advertising BLE services");
 	}
