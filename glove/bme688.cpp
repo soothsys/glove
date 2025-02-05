@@ -21,7 +21,7 @@
 #define	SAMPLE_RATE					BSEC_SAMPLE_RATE_CONT
 #define TEMP_OFFSET					TEMP_OFFSET_LP
 
-#define BLE_NUM_HANDLES       16 //Need more than the default 15 handles due to large number of characteristics
+#define BLE_NUM_HANDLES       22 //Need more than the default 15 handles due to large number of characteristics
 #define BLE_INST_ID           0
 #define BLE_SERVICE_UUID			BLEUUID((uint16_t)0x181A)
 #define DESCRIPTOR_UUID				BLEUUID((uint16_t)0x2902)
@@ -30,18 +30,24 @@
 #define PRES_CHARACTERISTIC_UUID	BLEUUID((uint16_t)0x2A6D)
 #define IAQ_CHARACTERISTIC_UUID   "b52338a6-b7fa-47d9-8db4-dbb86ac6b05c" //Custom UUID - IAQ does not exist in BLE spec
 #define SIAQ_CHARACTERISTIC_UUID  "0d1ab684-14a4-479b-9dcd-86b6fc2e99fa"
+#define CO2_CHARACTERISTIC_UUID   BLEUUID((uint16_t)0x2B8C)
+#define BVOC_CHARACTERISTIC_UUID   BLEUUID((uint16_t)0x2BE7)
 
 BLECharacteristic m_tempCharacteristic(TEMP_CHARACTERISTIC_UUID, BLECharacteristic::PROPERTY_NOTIFY);
 BLECharacteristic m_humCharacteristic(HUM_CHARACTERISTIC_UUID, BLECharacteristic::PROPERTY_NOTIFY);
 BLECharacteristic m_presCharacteristic(PRES_CHARACTERISTIC_UUID, BLECharacteristic::PROPERTY_NOTIFY);
 BLECharacteristic m_iaqCharacteristic(IAQ_CHARACTERISTIC_UUID, BLECharacteristic::PROPERTY_NOTIFY);
 BLECharacteristic m_siaqCharacteristic(SIAQ_CHARACTERISTIC_UUID, BLECharacteristic::PROPERTY_NOTIFY);
+BLECharacteristic m_co2Characteristic(CO2_CHARACTERISTIC_UUID, BLECharacteristic::PROPERTY_NOTIFY);
+BLECharacteristic m_bvocCharacteristic(BVOC_CHARACTERISTIC_UUID, BLECharacteristic::PROPERTY_NOTIFY);
 
 BLEDescriptor m_tempDescriptor(DESCRIPTOR_UUID);
 BLEDescriptor m_humDescriptor(DESCRIPTOR_UUID);
 BLEDescriptor m_presDescriptor(DESCRIPTOR_UUID);
 BLEDescriptor m_iaqDescriptor(DESCRIPTOR_UUID);
 BLEDescriptor m_siaqDescriptor(DESCRIPTOR_UUID);
+BLEDescriptor m_co2Descriptor(DESCRIPTOR_UUID);
+BLEDescriptor m_bvocDescriptor(DESCRIPTOR_UUID);
 
 Bsec2 m_envSensor;
 
@@ -93,6 +99,14 @@ void newDataCallback(const bme68xData data, const bsecOutputs outputs, Bsec2 bse
       case BSEC_OUTPUT_STATIC_IAQ:
         pCharacteristic = &m_siaqCharacteristic;
         break;
+      
+      case BSEC_OUTPUT_CO2_EQUIVALENT:
+        pCharacteristic = &m_co2Characteristic;
+        break;
+      
+      case BSEC_OUTPUT_BREATH_VOC_EQUIVALENT:
+        pCharacteristic = &m_bvocCharacteristic;
+        break;
 				
 			default:
 				break;
@@ -112,9 +126,9 @@ bool bme688_init(i2c_address_t addr) {
 		BSEC_OUTPUT_SENSOR_HEAT_COMPENSATED_HUMIDITY,
 		BSEC_OUTPUT_RAW_PRESSURE,							//No compensated pressure option exists
 		BSEC_OUTPUT_IAQ,									//Raw IAQ measurement
-		BSEC_OUTPUT_STATIC_IAQ/*,								//"Delta" IAQ measurement relative to running average, intended to show changes in air quality against "normal" value for location
+		BSEC_OUTPUT_STATIC_IAQ,								//"Delta" IAQ measurement relative to running average, intended to show changes in air quality against "normal" value for location
 		BSEC_OUTPUT_CO2_EQUIVALENT,
-		BSEC_OUTPUT_BREATH_VOC_EQUIVALENT,
+		BSEC_OUTPUT_BREATH_VOC_EQUIVALENT/*,
 		BSEC_OUTPUT_STABILIZATION_STATUS,					//0 = stabilisation in progress, 1 = stabilisation finished
 		BSEC_OUTPUT_RUN_IN_STATUS							//0 = run-in in progress, 1 = run-in finished*/
 	};
@@ -148,11 +162,15 @@ bool bme688_addServices(BLEServer *pServer) {
 	pService->addCharacteristic(&m_presCharacteristic);
   pService->addCharacteristic(&m_iaqCharacteristic);
   pService->addCharacteristic(&m_siaqCharacteristic);
+  pService->addCharacteristic(&m_co2Characteristic);
+  pService->addCharacteristic(&m_bvocCharacteristic);
 	m_tempCharacteristic.addDescriptor(&m_tempDescriptor);
 	m_humCharacteristic.addDescriptor(&m_humDescriptor);
 	m_presCharacteristic.addDescriptor(&m_presDescriptor);
   m_iaqCharacteristic.addDescriptor(&m_iaqDescriptor);
   m_siaqCharacteristic.addDescriptor(&m_siaqDescriptor);
+  m_co2Characteristic.addDescriptor(&m_co2Descriptor);
+  m_bvocCharacteristic.addDescriptor(&m_bvocDescriptor);
 	
 	pService->start();
 	return true;

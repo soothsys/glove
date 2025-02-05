@@ -9,7 +9,9 @@ const supportedCharacteristics = new Map([
 	[BluetoothUUID.canonicalUUID('0x2A6E'), 'Temperature'],
 	[BluetoothUUID.canonicalUUID('0x2A6F'), 'Humidity'],
 	['b52338a6-b7fa-47d9-8db4-dbb86ac6b05c', 'Index of air quality (IAQ)'],
-	['0d1ab684-14a4-479b-9dcd-86b6fc2e99fa', 'Static index of air quality (SIAQ)']
+	['0d1ab684-14a4-479b-9dcd-86b6fc2e99fa', 'Static index of air quality (SIAQ)'],
+	[BluetoothUUID.canonicalUUID('0x2B8C'), 'CO2 equivalent concentration'],
+	[BluetoothUUID.canonicalUUID('0x2BE7'), 'Breath VOC equivalent concentration']
 ]);
 
 const statusBox = document.getElementById('statusBox');
