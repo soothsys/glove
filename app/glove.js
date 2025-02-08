@@ -29,6 +29,8 @@ const supportedServices = new Map([
 	[BluetoothUUID.canonicalUUID('0x181A'), 'Environmental Sensor']
 ]);
 
+const presInfoCache = new Map();
+
 const statusBox = document.getElementById('statusBox');
 const statusMessage = document.getElementById('statusMessage');
 const txtStatus = document.getElementById('txtStatus');
@@ -67,34 +69,34 @@ function bluetoothConnect() {
 
 	bttnConnect.disabled = true;
 	bttnConnect.className = 'disabled';
-	
+
 	console.log('Opening Bluetooth connection...');
 	navigator.bluetooth.requestDevice({
-		filters: [{name: DEVICE_NAME}],
+		filters: [{ name: DEVICE_NAME }],
 		optionalServices: [getSupportedUuids()]
 	})
-	.then(device => {
-		console.log('Connected to: ', device.name);
-		statusOk('Connected to ' + device.name);
-		device.addEventListener('gattservicedisconnected', onDisconnect);
-		return device.gatt.connect();
-	})
-	.then(gattServer => {
-		bleServer = gattServer;
-		console.log('GATT server connected');
-		return bleServer.getPrimaryServices();
-	})
-	.then(services => initServices(services))
-	.catch(error => {
-		if (bleServer && bleServer.connected) {
-			bleServer.disconnect();
-		}
+		.then(device => {
+			console.log('Connected to: ', device.name);
+			statusOk('Connected to ' + device.name);
+			device.addEventListener('gattservicedisconnected', onDisconnect);
+			return device.gatt.connect();
+		})
+		.then(gattServer => {
+			bleServer = gattServer;
+			console.log('GATT server connected');
+			return bleServer.getPrimaryServices();
+		})
+		.then(services => initServices(services))
+		.catch(error => {
+			if (bleServer && bleServer.connected) {
+				bleServer.disconnect();
+			}
 
-		console.log('Error connecting to Bluetooth device: ', error);
-		statusFail('Error connecting to Bluetooth device');
-		bttnConnect.disabled = false;
-		bttnConnect.className = '';
-	});
+			console.log('Error connecting to Bluetooth device: ', error);
+			statusFail('Error connecting to Bluetooth device');
+			bttnConnect.disabled = false;
+			bttnConnect.className = '';
+		});
 }
 
 function onDisconnect(event) {
@@ -148,18 +150,40 @@ function initService(service) {
 
 function initCharacteristics(table, characteristics) {
 	const decoder = new TextDecoder();
+
 	for (const characteristic of characteristics) {
+		let characteristicName = '';
 		characteristic.getDescriptor(NAME_DESCRIPTOR_UUID).then(nameDescriptor => {
 			return nameDescriptor.readValue();
 		}).then(arrBuffer => {
-			const characteristicName = decoder.decode(arrBuffer);
+			characteristicName = decoder.decode(arrBuffer);
 			console.log('Found characteristic "', characteristicName, '" with UUID "', characteristic.uuid, '"');
-			showCharacteristic(table, characteristic.uuid, characteristicName);
+			return characteristic.getDescriptor(PRES_DESCRIPTOR_UUID);
+		}).then(presDescriptor => {
+			return presDescriptor.readValue();
+		}).then(dataView => {
+			const presInfo = readPresInfo(dataView);
+			if (presInfo) {
+				presInfoCache.set(characteristic.uuid, presInfo);
+				showCharacteristic(table, characteristic.uuid, characteristicName);
 
-			characteristic.addEventListener('characteristicvaluechanged', onNotify);
-			characteristic.startNotifications();
-			console.log('Started notifications for UUID "', characteristic.uuid, '"');
+				characteristic.addEventListener('characteristicvaluechanged', onNotify);
+				characteristic.startNotifications();
+				console.log('Started notifications for UUID "', characteristic.uuid, '"');
+			}
 		});
+	}
+}
+
+function readPresInfo(dataView) {
+	if (dataView.byteLength < PRES_DESCRIPTOR_LENGTH) {
+		console.log('Characteristic presentation descriptor received was in invalid format');
+	} else {
+		const presInfo = {};
+		presInfo.format = dataView.getUint8(0, IS_LITTLE_ENDIAN);
+		presInfo.exponent = dataView.getInt8(1, IS_LITTLE_ENDIAN);
+		presInfo.unit = dataView.getUint16(2, IS_LITTLE_ENDIAN);
+		return presInfo;
 	}
 }
 
@@ -181,31 +205,17 @@ function onNotify(event) {
 	const valCell = document.getElementById(event.target.uuid);
 	if (!valCell) {
 		console.log('No target cell found for UUID "', event.target.uuid, '"');
+	} else if (!presInfoCache.has(event.target.uuid)) {
+		console.log('Presentation info descriptor not recorded for UUID "', event.target.uuid, '"');
 	} else {
-		event.target.getDescriptor(PRES_DESCRIPTOR_UUID).then(presDescriptor => {
-			return presDescriptor.readValue();
-		}).then(dataView => {
-			const presInfo = readPresInfo(dataView);
-			if (presInfo) {
-				let val = readValue(event.target.value, presInfo);
-				val = formatValue(val, presInfo);
+		const presInfo = presInfoCache.get(event.target.uuid);
+		if (presInfo) {
+			let val = readValue(event.target.value, presInfo);
+			val = formatValue(val, presInfo);
 
-				const unit = getUnitString(presInfo);
-				valCell.innerHTML = val + ' ' + unit;
-			}
-		});
-	}
-}
-
-function readPresInfo(dataView) {
-	if (dataView.byteLength < PRES_DESCRIPTOR_LENGTH) {
-		console.log('Characteristic presentation descriptor received was in invalid format');
-	} else {
-		const presInfo = {};
-		presInfo.format = dataView.getUint8(0, IS_LITTLE_ENDIAN);
-		presInfo.exponent = dataView.getInt8(1, IS_LITTLE_ENDIAN);
-		presInfo.unit = dataView.getUint16(2, IS_LITTLE_ENDIAN);
-		return presInfo;
+			const unit = getUnitString(presInfo);
+			valCell.innerHTML = val + ' ' + unit;
+		}
 	}
 }
 
@@ -217,7 +227,7 @@ function readValue(dataView, presInfo) {
 			length = 1;
 			decodeFunc = (x) => { return (x.getUint8(0, IS_LITTLE_ENDIAN) != 0); };
 			break;
-		
+
 		case BLE_FORMAT_UINT8:
 			length = 1;
 			decodeFunc = (x) => { return x.getUint8(0, IS_LITTLE_ENDIAN); };
@@ -293,58 +303,3 @@ function getUnitString(presInfo) {
 		return '';
 	}
 }
-
-/*
-function readUInt8(dataView) {
-	if (dataView.byteLength < 1) {
-		console.log('Characteristic value length does not match format specified in client presentation descriptor');
-		return 0;
-	} else {
-		return dataView.getUint8();
-	}
-}
-
-function readUInt16(dataView) {
-	if (dataView.byteLength < 2) {
-		console.log('Characteristic value length does not match format specified in client presentation descriptor');
-		return 0;
-	} else {
-		return dataView.getUint16();
-	}
-}
-
-function readUInt32(dataView) {
-	if (dataView.byteLength < 4) {
-		console.log('Characteristic value length does not match format specified in client presentation descriptor');
-		return 0;
-	} else {
-		return dataView.getUint32();
-	}
-}
-
-function readInt8(dataView) {
-	if (dataView.byteLength < 1) {
-		console.log('Characteristic value length does not match format specified in client presentation descriptor');
-		return 0;
-	} else {
-		return dataView.getInt8();
-	}
-}
-
-function readInt16(dataView) {
-	if (dataView.byteLength < 2) {
-		console.log('Characteristic value length does not match format specified in client presentation descriptor');
-		return 0;
-	} else {
-		return dataView.getUint16();
-	}
-}
-
-function readInt32(dataView) {
-	if (dataView.byteLength < 4) {
-		console.log('Characteristic value length does not match format specified in client presentation descriptor');
-		return 0;
-	} else {
-		return dataView.getInt32();
-	}
-}*/
