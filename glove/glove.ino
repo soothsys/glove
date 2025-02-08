@@ -19,6 +19,7 @@
 #include "err.h"
 #include "i2c_address.h"
 #include "bme688.h"
+#include "battery.h"
 
 #define BAUD_RATE			115200
 
@@ -47,6 +48,8 @@ void setup(void) {
 	Serial.begin(BAUD_RATE);
 	Wire.begin();
 	
+  battery_init();
+
 	int nSensors = 0;
 	if (bme688_init(i2c_address_bme688)) {
 		nSensors++;
@@ -63,8 +66,11 @@ void setup(void) {
 	}
 	
 	pServer->setCallbacks(new MyServerCallbacks());
-	if (!bme688_addServices(pServer)) {
-		ERROR("Failed to add BME688 services");
+  if (!battery_addService(pServer)) {
+    ERROR("Failed to add battery monitor service");
+  }
+	if (!bme688_addService(pServer)) {
+		ERROR("Failed to add BME688 service");
 	}
 	
 	pAdvert = pServer->getAdvertising();
@@ -78,6 +84,7 @@ void setup(void) {
 
 void loop(void) {
 	if (m_deviceConnected) {
+    battery_loop();
 		bme688_loop();
 	}
 }

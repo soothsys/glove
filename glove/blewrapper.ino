@@ -3,7 +3,13 @@
 
 #include "blewrapper.h"
 
-int BLEWrapper::NUM_HANDLES = 5; //2 per characteristic + 1 per descriptor
+static const int NUM_SERVICE_HANDLES = 3; //Each service requires 3 handles
+static const int NUM_CHARACTERISTIC_HANDLES = 2; //Each characteristic requires 2 handles
+static const int NUM_DESCRIPTOR_HANDLES = 3; //Each characteristic has 3 descriptors, each of which requires 1 handle
+
+int BLEWrapper::calcNumHandles(int numCharacteristics) {
+  return NUM_SERVICE_HANDLES + numCharacteristics * (NUM_CHARACTERISTIC_HANDLES + NUM_DESCRIPTOR_HANDLES);
+}
 
 BLEWrapper::BLEWrapper(BLECharacteristic *pCharacteristic, char *description, uint8_t format, int8_t exponent, BLEUnit unit) {
   m_pCharacteristic = pCharacteristic;
@@ -82,4 +88,10 @@ void BLEWrapper::writeValue(float unscaled) {
 void BLEWrapper::writeValue(char *str) {
   size_t length = strlen(str); //Don't send null terminator
   m_pCharacteristic->setValue((uint8_t *)str, length);
+}
+
+void BLEWrapper::writeValue(bool b) {
+  uint8_t bytes[1];
+  bytes[0] = (b ? 1 : 0);
+  m_pCharacteristic->setValue(bytes, 1);
 }

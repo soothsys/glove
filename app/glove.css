@@ -4,6 +4,7 @@ html {
 }
 
 div {
+	margin:5px;
 	padding: 8px;
 	border-radius: 8px;
 }

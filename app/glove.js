@@ -19,6 +19,7 @@ const BLE_FORMAT_SINT32 = 0x10;
 const BLE_UNITS = new Map([
 	[0x2700, ''], //Unitless
 	[0x2724, 'Pa'],
+	[0x2728, 'V'],
 	[0x272F, '°C'],
 	[0x27AD, '%'],
 	[0x27C4, 'ppm'],
@@ -26,7 +27,8 @@ const BLE_UNITS = new Map([
 ]);
 
 const supportedServices = new Map([
-	[BluetoothUUID.canonicalUUID('0x181A'), 'Environmental Sensor']
+	[BluetoothUUID.canonicalUUID(0x180F), 'Battery'],
+	[BluetoothUUID.canonicalUUID(0x181A), 'Environmental Sensor']
 ]);
 
 const presInfoCache = new Map();
@@ -73,7 +75,7 @@ function bluetoothConnect() {
 	console.log('Opening Bluetooth connection...');
 	navigator.bluetooth.requestDevice({
 		filters: [{ name: DEVICE_NAME }],
-		optionalServices: [getSupportedUuids()]
+		optionalServices: getSupportedUuids()
 	})
 		.then(device => {
 			console.log('Connected to: ', device.name);

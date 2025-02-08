@@ -1,13 +1,3 @@
-/*
- * This file includes code which is redistributed under the following copyright license:
- *
- * Rui Santos
- * Complete project details at https://RandomNerdTutorials.com/esp32-ble-server-environmental-sensing-service/
- *
- * Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files. 
- * The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.
-*/
-
 #define ERR_MODULE_NAME "BME688"
 
 #include <Wire.h>
@@ -71,8 +61,8 @@
 #define PRES_NAME "Pressure"
 #define IAQ_NAME "Index of air quality (adjusted)"
 #define SIAQ_NAME "Index of air quality (raw)"
-#define CO2_NAME "CO2 equivalent concentration"
-#define BVOC_NAME "Breath VOC equivalent concentration"
+#define CO2_NAME "CO2 concentration"
+#define BVOC_NAME "Breath VOC concentration"
 #define STAB_NAME "Stabilised"
 #define RUNIN_NAME "Run in"
 
@@ -84,29 +74,29 @@
 #define CO2_SCALE 1.0f
 #define BVOC_SCALE 1000.0f  //Sensor reports BVOCs in PPM but converting to PPB for display as reading is so small
 
-BLECharacteristic m_tempCharacteristic(TEMP_UUID, BLECharacteristic::PROPERTY_NOTIFY);
-BLECharacteristic m_humCharacteristic(HUM_UUID, BLECharacteristic::PROPERTY_NOTIFY);
-BLECharacteristic m_presCharacteristic(PRES_UUID, BLECharacteristic::PROPERTY_NOTIFY);
-BLECharacteristic m_iaqCharacteristic(IAQ_UUID, BLECharacteristic::PROPERTY_NOTIFY);
-BLECharacteristic m_siaqCharacteristic(SIAQ_UUID, BLECharacteristic::PROPERTY_NOTIFY);
-BLECharacteristic m_co2Characteristic(CO2_UUID, BLECharacteristic::PROPERTY_NOTIFY);
-BLECharacteristic m_bvocCharacteristic(BVOC_UUID, BLECharacteristic::PROPERTY_NOTIFY);
-BLECharacteristic m_stabCharacteristic(STAB_UUID, BLECharacteristic::PROPERTY_NOTIFY);
-BLECharacteristic m_runinCharacteristic(RUNIN_UUID, BLECharacteristic::PROPERTY_NOTIFY);
+static BLECharacteristic m_tempCharacteristic(TEMP_UUID, BLECharacteristic::PROPERTY_NOTIFY);
+static BLECharacteristic m_humCharacteristic(HUM_UUID, BLECharacteristic::PROPERTY_NOTIFY);
+static BLECharacteristic m_presCharacteristic(PRES_UUID, BLECharacteristic::PROPERTY_NOTIFY);
+static BLECharacteristic m_iaqCharacteristic(IAQ_UUID, BLECharacteristic::PROPERTY_NOTIFY);
+static BLECharacteristic m_siaqCharacteristic(SIAQ_UUID, BLECharacteristic::PROPERTY_NOTIFY);
+static BLECharacteristic m_co2Characteristic(CO2_UUID, BLECharacteristic::PROPERTY_NOTIFY);
+static BLECharacteristic m_bvocCharacteristic(BVOC_UUID, BLECharacteristic::PROPERTY_NOTIFY);
+static BLECharacteristic m_stabCharacteristic(STAB_UUID, BLECharacteristic::PROPERTY_NOTIFY);
+static BLECharacteristic m_runinCharacteristic(RUNIN_UUID, BLECharacteristic::PROPERTY_NOTIFY);
 
-BLEWrapper m_tempWrapper(&m_tempCharacteristic, TEMP_NAME, TEMP_FORMAT, TEMP_EXPONENT, TEMP_UNIT);
-BLEWrapper m_humWrapper(&m_humCharacteristic, HUM_NAME, HUM_FORMAT, HUM_EXPONENT, HUM_UNIT);
-BLEWrapper m_presWrapper(&m_presCharacteristic, PRES_NAME, PRES_FORMAT, PRES_EXPONENT, PRES_UNIT);
-BLEWrapper m_iaqWrapper(&m_iaqCharacteristic, IAQ_NAME, IAQ_FORMAT, IAQ_EXPONENT, IAQ_UNIT);
-BLEWrapper m_siaqWrapper(&m_siaqCharacteristic, SIAQ_NAME, SIAQ_FORMAT, SIAQ_EXPONENT, SIAQ_UNIT);
-BLEWrapper m_co2Wrapper(&m_co2Characteristic, CO2_NAME, CO2_FORMAT, CO2_EXPONENT, CO2_UNIT);
-BLEWrapper m_bvocWrapper(&m_bvocCharacteristic, BVOC_NAME, BVOC_FORMAT, BVOC_EXPONENT, BVOC_UNIT);
-BLEWrapper m_stabWrapper(&m_stabCharacteristic, STAB_NAME, STAB_FORMAT, STAB_EXPONENT, STAB_UNIT);
-BLEWrapper m_runinWrapper(&m_runinCharacteristic, RUNIN_NAME, RUNIN_FORMAT, RUNIN_EXPONENT, RUNIN_UNIT);
+static BLEWrapper m_tempWrapper(&m_tempCharacteristic, TEMP_NAME, TEMP_FORMAT, TEMP_EXPONENT, TEMP_UNIT);
+static BLEWrapper m_humWrapper(&m_humCharacteristic, HUM_NAME, HUM_FORMAT, HUM_EXPONENT, HUM_UNIT);
+static BLEWrapper m_presWrapper(&m_presCharacteristic, PRES_NAME, PRES_FORMAT, PRES_EXPONENT, PRES_UNIT);
+static BLEWrapper m_iaqWrapper(&m_iaqCharacteristic, IAQ_NAME, IAQ_FORMAT, IAQ_EXPONENT, IAQ_UNIT);
+static BLEWrapper m_siaqWrapper(&m_siaqCharacteristic, SIAQ_NAME, SIAQ_FORMAT, SIAQ_EXPONENT, SIAQ_UNIT);
+static BLEWrapper m_co2Wrapper(&m_co2Characteristic, CO2_NAME, CO2_FORMAT, CO2_EXPONENT, CO2_UNIT);
+static BLEWrapper m_bvocWrapper(&m_bvocCharacteristic, BVOC_NAME, BVOC_FORMAT, BVOC_EXPONENT, BVOC_UNIT);
+static BLEWrapper m_stabWrapper(&m_stabCharacteristic, STAB_NAME, STAB_FORMAT, STAB_EXPONENT, STAB_UNIT);
+static BLEWrapper m_runinWrapper(&m_runinCharacteristic, RUNIN_NAME, RUNIN_FORMAT, RUNIN_EXPONENT, RUNIN_UNIT);
 
-Bsec2 m_envSensor;
-bool m_stabilised = false;
-bool m_runIn = false;
+static Bsec2 m_envSensor;
+static bool m_stabilised = false;
+static bool m_runIn = false;
 
 static void newDataCallback(const bme68xData data, const bsecOutputs outputs, Bsec2 bsec);  //Hack gets around a type definition error in the library
 
@@ -225,8 +215,8 @@ bool bme688_init(i2c_address_t addr) {
   return true;
 }
 
-bool bme688_addServices(BLEServer *pServer) {
-  int numHandles = 1 + NUM_CHARACTERISTICS * BLEWrapper::NUM_HANDLES;
+bool bme688_addService(BLEServer *pServer) {
+  int numHandles = BLEWrapper::calcNumHandles(NUM_CHARACTERISTICS);
   BLEService *pService = pServer->createService(BLE_SERVICE_UUID, numHandles, BLE_INST_ID);
   if (pService == NULL) {
     ERROR("Cannot add BLE service");
