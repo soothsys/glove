@@ -74,15 +74,15 @@
 #define CO2_SCALE 1.0f
 #define BVOC_SCALE 1000.0f  //Sensor reports BVOCs in PPM but converting to PPB for display as reading is so small
 
-static BLECharacteristic m_tempCharacteristic(TEMP_UUID, BLECharacteristic::PROPERTY_NOTIFY);
-static BLECharacteristic m_humCharacteristic(HUM_UUID, BLECharacteristic::PROPERTY_NOTIFY);
-static BLECharacteristic m_presCharacteristic(PRES_UUID, BLECharacteristic::PROPERTY_NOTIFY);
-static BLECharacteristic m_iaqCharacteristic(IAQ_UUID, BLECharacteristic::PROPERTY_NOTIFY);
-static BLECharacteristic m_siaqCharacteristic(SIAQ_UUID, BLECharacteristic::PROPERTY_NOTIFY);
-static BLECharacteristic m_co2Characteristic(CO2_UUID, BLECharacteristic::PROPERTY_NOTIFY);
-static BLECharacteristic m_bvocCharacteristic(BVOC_UUID, BLECharacteristic::PROPERTY_NOTIFY);
-static BLECharacteristic m_stabCharacteristic(STAB_UUID, BLECharacteristic::PROPERTY_NOTIFY);
-static BLECharacteristic m_runinCharacteristic(RUNIN_UUID, BLECharacteristic::PROPERTY_NOTIFY);
+static BLECharacteristic m_tempCharacteristic(TEMP_UUID, BLECharacteristic::PROPERTY_READ | BLECharacteristic::PROPERTY_NOTIFY);
+static BLECharacteristic m_humCharacteristic(HUM_UUID, BLECharacteristic::PROPERTY_READ | BLECharacteristic::PROPERTY_NOTIFY);
+static BLECharacteristic m_presCharacteristic(PRES_UUID, BLECharacteristic::PROPERTY_READ | BLECharacteristic::PROPERTY_NOTIFY);
+static BLECharacteristic m_iaqCharacteristic(IAQ_UUID, BLECharacteristic::PROPERTY_READ | BLECharacteristic::PROPERTY_NOTIFY);
+static BLECharacteristic m_siaqCharacteristic(SIAQ_UUID, BLECharacteristic::PROPERTY_READ | BLECharacteristic::PROPERTY_NOTIFY);
+static BLECharacteristic m_co2Characteristic(CO2_UUID, BLECharacteristic::PROPERTY_READ | BLECharacteristic::PROPERTY_NOTIFY);
+static BLECharacteristic m_bvocCharacteristic(BVOC_UUID, BLECharacteristic::PROPERTY_READ | BLECharacteristic::PROPERTY_NOTIFY);
+static BLECharacteristic m_stabCharacteristic(STAB_UUID, BLECharacteristic::PROPERTY_READ | BLECharacteristic::PROPERTY_NOTIFY);
+static BLECharacteristic m_runinCharacteristic(RUNIN_UUID, BLECharacteristic::PROPERTY_READ | BLECharacteristic::PROPERTY_NOTIFY);
 
 static BLEWrapper m_tempWrapper(&m_tempCharacteristic, TEMP_NAME, TEMP_FORMAT, TEMP_EXPONENT, TEMP_UNIT);
 static BLEWrapper m_humWrapper(&m_humCharacteristic, HUM_NAME, HUM_FORMAT, HUM_EXPONENT, HUM_UNIT);
@@ -179,7 +179,6 @@ static void newDataCallback(const bme68xData data, const bsecOutputs outputs, Bs
       BLECharacteristic *pCharacteristic = pWrapper->getCharacteristic();
       if (pCharacteristic != NULL) {
         pWrapper->writeValue(scaleFactor * output.signal);
-        pCharacteristic->notify();
       }
     }
   }

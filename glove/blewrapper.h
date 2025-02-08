@@ -30,12 +30,17 @@ class BLEWrapper {
 		uint8_t m_format;
 		int8_t m_exponent;
 		BLEUnit m_unit;
+    bool m_written = false;
+
+    union {
+      float f;
+      bool b;
+    } m_lastVal;
 		
   public:
     BLEWrapper(BLECharacteristic *pCharacteristic, char *description, uint8_t format, int8_t exponent, BLEUnit unit);
     BLECharacteristic * getCharacteristic(void);
 		void writeValue(float unscaled);
-    void writeValue(char *str);
     void writeValue(bool b);
 
     static int calcNumHandles(int numCharacteristics);

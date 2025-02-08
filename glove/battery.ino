@@ -38,9 +38,9 @@
 #define CRITICAL_NAME "Battery critical"
 #define VOLTAGE_NAME "Battery voltage"
 
-static BLECharacteristic m_levelCharacteristic(LEVEL_UUID, BLECharacteristic::PROPERTY_NOTIFY);
-static BLECharacteristic m_criticalCharacteristic(CRITICAL_UUID, BLECharacteristic::PROPERTY_NOTIFY);
-static BLECharacteristic m_voltageCharacteristic(VOLTAGE_UUID, BLECharacteristic::PROPERTY_NOTIFY);
+static BLECharacteristic m_levelCharacteristic(LEVEL_UUID, BLECharacteristic::PROPERTY_READ | BLECharacteristic::PROPERTY_NOTIFY);
+static BLECharacteristic m_criticalCharacteristic(CRITICAL_UUID, BLECharacteristic::PROPERTY_READ | BLECharacteristic::PROPERTY_NOTIFY);
+static BLECharacteristic m_voltageCharacteristic(VOLTAGE_UUID, BLECharacteristic::PROPERTY_READ | BLECharacteristic::PROPERTY_NOTIFY);
 
 static BLEWrapper m_levelWrapper(&m_levelCharacteristic, LEVEL_NAME, LEVEL_FORMAT, LEVEL_EXPONENT, LEVEL_UNIT);
 static BLEWrapper m_criticalWrapper(&m_criticalCharacteristic, CRITICAL_NAME, CRITICAL_FORMAT, CRITICAL_EXPONENT, CRITICAL_UNIT);

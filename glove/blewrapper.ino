@@ -83,15 +83,24 @@ void BLEWrapper::writeValue(float unscaled) {
 	
 	uint8_t *bytes = static_cast<uint8_t *>(rawPtr);
 	m_pCharacteristic->setValue(bytes, length);
-}
 
-void BLEWrapper::writeValue(char *str) {
-  size_t length = strlen(str); //Don't send null terminator
-  m_pCharacteristic->setValue((uint8_t *)str, length);
+  if (!m_written || (m_lastVal.f != unscaled)) {
+    m_pCharacteristic->notify();
+  }
+
+  m_written = true;
+  m_lastVal.f = unscaled;
 }
 
 void BLEWrapper::writeValue(bool b) {
   uint8_t bytes[1];
   bytes[0] = (b ? 1 : 0);
   m_pCharacteristic->setValue(bytes, 1);
+
+  if (!m_written || (m_lastVal.b != b)) {
+    m_pCharacteristic->notify();
+  }
+
+  m_written = true;
+  m_lastVal.b = b;  
 }

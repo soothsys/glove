@@ -163,15 +163,17 @@ function initCharacteristics(table, characteristics) {
 			return characteristic.getDescriptor(PRES_DESCRIPTOR_UUID);
 		}).then(presDescriptor => {
 			return presDescriptor.readValue();
-		}).then(dataView => {
-			const presInfo = readPresInfo(dataView);
+		}).then(presDataView => {
+			const presInfo = readPresInfo(presDataView);
 			if (presInfo) {
 				presInfoCache.set(characteristic.uuid, presInfo);
-				showCharacteristic(table, characteristic.uuid, characteristicName);
-
-				characteristic.addEventListener('characteristicvaluechanged', onNotify);
-				characteristic.startNotifications();
-				console.log('Started notifications for UUID "', characteristic.uuid, '"');
+				characteristic.readValue().then(valDataView => {
+					showCharacteristic(table, characteristic.uuid, characteristicName);
+					updateVal(characteristic.uuid, valDataView, presInfo);
+					characteristic.addEventListener('characteristicvaluechanged', onNotify);
+					characteristic.startNotifications();
+					console.log('Started notifications for UUID "', characteristic.uuid, '"');
+				});
 			}
 		});
 	}
@@ -204,20 +206,26 @@ function showCharacteristic(table, uuid, characteristicName) {
 }
 
 function onNotify(event) {
-	const valCell = document.getElementById(event.target.uuid);
-	if (!valCell) {
-		console.log('No target cell found for UUID "', event.target.uuid, '"');
-	} else if (!presInfoCache.has(event.target.uuid)) {
+	if (!presInfoCache.has(event.target.uuid)) {
 		console.log('Presentation info descriptor not recorded for UUID "', event.target.uuid, '"');
 	} else {
 		const presInfo = presInfoCache.get(event.target.uuid);
 		if (presInfo) {
-			let val = readValue(event.target.value, presInfo);
-			val = formatValue(val, presInfo);
-
-			const unit = getUnitString(presInfo);
-			valCell.innerHTML = val + ' ' + unit;
+			updateVal(event.target.uuid, event.target.value, presInfo);
 		}
+	}
+}
+
+function updateVal(uuid, dataView, presInfo) {
+	const valCell = document.getElementById(uuid);
+	if (!valCell) {
+		console.log('No target cell found for UUID "', uuid, '"');
+	} else {
+		let val = readValue(dataView, presInfo);
+		val = formatValue(val, presInfo);
+
+		const unit = getUnitString(presInfo);
+		valCell.innerHTML = val + ' ' + unit;
 	}
 }
 
