@@ -9,7 +9,7 @@
 #define SAMPLE_TIME 1000 //milliseconds
 #define PIN_VBAT A13
 #define VBAT_SCALE (1.0f / 500.0f)
-#define VBAT_FULL 4.25f
+#define VBAT_FULL 4.20f
 #define VBAT_LOW 3.60f
 #define VBAT_CRITICAL 3.30f
 #define VBAT_EMPTY 3.20f
