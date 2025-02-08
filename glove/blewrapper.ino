@@ -34,6 +34,11 @@ void BLEWrapper::writeValue(float unscaled) {
 	uint32_t uval;
 	int32_t ival;
 	switch (m_format) {
+    case BLE2904::FORMAT_BOOLEAN:
+      uval = ((unscaled == 0.0f) ? 0 : 1);
+      rawPtr = static_cast<void *>(&uval);
+      break;
+
 		case BLE2904::FORMAT_UINT8:
 		case BLE2904::FORMAT_UINT16:
 		case BLE2904::FORMAT_UINT32:
@@ -52,6 +57,7 @@ void BLEWrapper::writeValue(float unscaled) {
 	
 	size_t length;
 	switch (m_format) {
+    case BLE2904::FORMAT_BOOLEAN:
 		case BLE2904::FORMAT_UINT8:
 		case BLE2904::FORMAT_SINT8:
 			length = 1;
@@ -71,4 +77,9 @@ void BLEWrapper::writeValue(float unscaled) {
 	
 	uint8_t *bytes = static_cast<uint8_t *>(rawPtr);
 	m_pCharacteristic->setValue(bytes, length);
+}
+
+void BLEWrapper::writeValue(char *str) {
+  size_t length = strlen(str); //Don't send null terminator
+  m_pCharacteristic->setValue((uint8_t *)str, length);
 }

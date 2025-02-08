@@ -8,6 +8,7 @@ const PRES_DESCRIPTOR_LENGTH = 7; //bytes
  * GATT format types defined in Bluetooth Assigned Numbers specification, section 2.4.1
  * https://www.bluetooth.com/wp-content/uploads/Files/Specification/HTML/Assigned_Numbers/out/en/Assigned_Numbers.pdf
  */
+const BLE_FORMAT_BOOLEAN = 0x01;
 const BLE_FORMAT_UINT8 = 0x04;
 const BLE_FORMAT_UINT16 = 0x06;
 const BLE_FORMAT_UINT32 = 0x08;
@@ -212,9 +213,14 @@ function readValue(dataView, presInfo) {
 	let length;
 	let decodeFunc;
 	switch (presInfo.format) {
+		case BLE_FORMAT_BOOLEAN:
+			length = 1;
+			decodeFunc = (x) => { return (x.getUint8(0, IS_LITTLE_ENDIAN) != 0); };
+			break;
+		
 		case BLE_FORMAT_UINT8:
 			length = 1;
-			decodeFunc = (x) => { return x.getUint8(0, IS_LITTLE_ENDIAN) };
+			decodeFunc = (x) => { return x.getUint8(0, IS_LITTLE_ENDIAN); };
 			break;
 
 		case BLE_FORMAT_UINT16:
@@ -256,19 +262,27 @@ function readValue(dataView, presInfo) {
 		rawVal = decodeFunc(dataView);
 	}
 
-	const scaleFactor = 10 ** presInfo.exponent;
-	return rawVal * scaleFactor;
+	if (presInfo.format == BLE_FORMAT_BOOLEAN) { //Ignore exponent for boolean
+		return rawVal;
+	} else {
+		const scaleFactor = 10 ** presInfo.exponent;
+		return rawVal * scaleFactor;
+	}
 }
 
 function formatValue(val, presInfo) {
-	let numDecimals = -presInfo.exponent;
-	if (numDecimals < 0) {
-		numDecimals = 0;
-	} else if (numDecimals > 100) {
-		numDecimals = 100;
-	}
+	if (presInfo.format == BLE_FORMAT_BOOLEAN) {
+		return val;
+	} else {
+		let numDecimals = -presInfo.exponent;
+		if (numDecimals < 0) {
+			numDecimals = 0;
+		} else if (numDecimals > 100) {
+			numDecimals = 100;
+		}
 
-	return val.toFixed(numDecimals);
+		return val.toFixed(numDecimals);
+	}
 }
 
 function getUnitString(presInfo) {

@@ -34,6 +34,8 @@ class BLEWrapper {
     BLEWrapper(BLECharacteristic *pCharacteristic, char *description, uint8_t format, int8_t exponent, BLEUnit unit);
     BLECharacteristic * getCharacteristic(void);
 		void writeValue(float unscaled);
+    void writeValue(char *str);
+    void writeValue(bool b);
 
   static int NUM_HANDLES;
 };
