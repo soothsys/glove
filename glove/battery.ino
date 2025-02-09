@@ -7,6 +7,7 @@
 #include "err.h"
 
 #define SAMPLE_TIME 1000 //milliseconds
+#define NUM_AVERAGE_SAMPLES 10 //Average battery voltage over 10 seconds to remove fluctuations due to load
 #define PIN_VBAT A13
 #define VBAT_SCALE (1.0f / 500.0f)
 #define VBAT_FULL 4.20f
@@ -46,9 +47,21 @@ static BLEWrapper m_levelWrapper(&m_levelCharacteristic, LEVEL_NAME, LEVEL_FORMA
 static BLEWrapper m_criticalWrapper(&m_criticalCharacteristic, CRITICAL_NAME, CRITICAL_FORMAT, CRITICAL_EXPONENT, CRITICAL_UNIT);
 static BLEWrapper m_voltageWrapper(&m_voltageCharacteristic, VOLTAGE_NAME, VOLTAGE_FORMAT, VOLTAGE_EXPONENT, VOLTAGE_UNIT);
 
+static float m_avgBuf[NUM_AVERAGE_SAMPLES];
+static int m_avgBufPos = 0;
 static unsigned long m_lastTime;
 
+static float readVoltage(void) {
+  return VBAT_SCALE * (float)analogReadMilliVolts(PIN_VBAT);
+}
+
 bool battery_init(void) {
+  float vbat = readVoltage();
+  int i;
+  for (i = 0; i < NUM_AVERAGE_SAMPLES; i++) {
+    m_avgBuf[i] = vbat; //Initialise average buffer
+  }
+
   m_lastTime = millis();
   return true;
 }
@@ -75,12 +88,27 @@ static void printBatteryVoltage(float vbat) {
   Serial.println("V)");
 }
 
+float getAverage(float next) {
+  m_avgBuf[m_avgBufPos++] = next;
+  if (m_avgBufPos >= NUM_AVERAGE_SAMPLES) {
+    m_avgBufPos = 0;
+  }
+
+  float sum = 0.0f;
+  int i;
+  for (i = 0; i < NUM_AVERAGE_SAMPLES; i++) {
+    sum += m_avgBuf[i];
+  }
+
+  return sum / (float)NUM_AVERAGE_SAMPLES;
+}
+
 void battery_loop(void) {
   unsigned long now = millis();
   if (now - m_lastTime >= SAMPLE_TIME) {
     m_lastTime = now;
 
-    float vbat = VBAT_SCALE * (float)analogReadMilliVolts(PIN_VBAT);
+    float vbat = getAverage(readVoltage());
     bool low = (vbat < VBAT_LOW);
     bool critical = (vbat < VBAT_CRITICAL);
     if (critical) {
