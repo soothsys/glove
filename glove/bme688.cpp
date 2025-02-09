@@ -52,7 +52,7 @@
 #define IAQ_UNIT BLEUnit::Unitless
 #define SIAQ_UNIT BLEUnit::Unitless
 #define CO2_UNIT BLEUnit::PPM
-#define BVOC_UNIT BLEUnit::PPB
+#define BVOC_UNIT BLEUnit::PPM
 #define STAB_UNIT BLEUnit::Unitless
 #define RUNIN_UNIT BLEUnit::Unitless
 
@@ -68,11 +68,11 @@
 
 #define TEMP_SCALE 1.0f
 #define HUM_SCALE 1.0f
-#define PRES_SCALE 100.0f  //Sensor reports pressure in hPa, BLE reports pressure in Pa (1hPa = 100Pa)
+#define PRES_SCALE 100.0f //Sensor reports pressure in hPa, BLE reports pressure in Pa (1hPa = 100Pa)
 #define IAQ_SCALE 1.0f
 #define SIAQ_SCALE 1.0f
 #define CO2_SCALE 1.0f
-#define BVOC_SCALE 1000.0f  //Sensor reports BVOCs in PPM but converting to PPB for display as reading is so small
+#define BVOC_SCALE 1.0f
 
 static BLECharacteristic m_tempCharacteristic(TEMP_UUID, BLECharacteristic::PROPERTY_READ | BLECharacteristic::PROPERTY_NOTIFY);
 static BLECharacteristic m_humCharacteristic(HUM_UUID, BLECharacteristic::PROPERTY_READ | BLECharacteristic::PROPERTY_NOTIFY);
