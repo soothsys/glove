@@ -10,7 +10,7 @@
 #define NUM_AVERAGE_SAMPLES 10 //Average battery voltage over 10 seconds to remove fluctuations due to load
 #define PIN_VBAT A13
 #define VBAT_SCALE (1.0f / 500.0f)
-#define VBAT_FULL 4.20f
+#define VBAT_FULL 4.10f
 #define VBAT_LOW 3.60f
 #define VBAT_CRITICAL 3.30f
 #define VBAT_EMPTY 3.20f
