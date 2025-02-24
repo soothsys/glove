@@ -20,6 +20,7 @@
 #include "i2c_address.h"
 #include "bme688.h"
 #include "battery.h"
+#include "as7341.h"
 
 #define BAUD_RATE			115200
 
@@ -54,6 +55,10 @@ void setup(void) {
 	if (bme688_init(i2c_address_bme688)) {
 		nSensors++;
 	}
+
+  if (as7341_init(i2c_address_as7341)) {
+    nSensors++;
+  }
 	
 	if (nSensors == 0) {
 		ERROR_HALT("Failed to initialise any sensors");
@@ -72,6 +77,9 @@ void setup(void) {
 	if (!bme688_addService(pServer)) {
 		ERROR("Failed to add BME688 service");
 	}
+  if (!as7341_addService(pServer)) {
+    ERROR("Failed to add AS7341 service");
+  }
 	
 	pAdvert = pServer->getAdvertising();
 	if (pAdvert == NULL) {
@@ -86,5 +94,6 @@ void loop(void) {
 	if (m_deviceConnected) {
     battery_loop();
 		bme688_loop();
+    as7341_loop();
 	}
 }

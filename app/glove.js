@@ -15,6 +15,7 @@ const BLE_FORMAT_UINT32 = 0x08;
 const BLE_FORMAT_SINT8 = 0x0C;
 const BLE_FORMAT_SINT16 = 0x0E;
 const BLE_FORMAT_SINT32 = 0x10;
+const BLE_FORMAT_FLOAT32 = 0x14;
 
 const BLE_UNITS = new Map([
 	[0x2700, ''], //Unitless
@@ -28,7 +29,8 @@ const BLE_UNITS = new Map([
 
 const supportedServices = new Map([
 	[BluetoothUUID.canonicalUUID(0x180F), 'Battery'],
-	[BluetoothUUID.canonicalUUID(0x181A), 'Environmental Sensor']
+	[BluetoothUUID.canonicalUUID(0x181A), 'Environmental Sensor'],
+	[BluetoothUUID.canonicalUUID(0x054D), 'Light Sensor']
 ]);
 
 const presInfoCache = new Map();
@@ -267,6 +269,11 @@ function readValue(dataView, presInfo) {
 			length = 4;
 			decodeFunc = (x) => { return x.getInt32(0, IS_LITTLE_ENDIAN); };
 			break;
+		
+		case BLE_FORMAT_FLOAT32:
+			length = 4;
+			decodeFunc = (x) => { return x.getFloat32(0, IS_LITTLE_ENDIAN); };
+			break;
 
 		default:
 			return 0;
@@ -280,6 +287,10 @@ function readValue(dataView, presInfo) {
 	let rawVal = 0;
 	if (decodeFunc) {
 		rawVal = decodeFunc(dataView);
+	}
+
+	if (presInfo.format == BLE_FORMAT_FLOAT32) {
+		console.log(rawVal);
 	}
 
 	if (presInfo.format == BLE_FORMAT_BOOLEAN) { //Ignore exponent for boolean

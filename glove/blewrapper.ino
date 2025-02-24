@@ -45,6 +45,10 @@ void BLEWrapper::writeValue(float unscaled) {
       rawPtr = static_cast<void *>(&uval);
       break;
 
+    case BLE2904::FORMAT_FLOAT32:
+      rawPtr = static_cast<void *>(&unscaled);
+      break;
+
 		case BLE2904::FORMAT_UINT8:
 		case BLE2904::FORMAT_UINT16:
 		case BLE2904::FORMAT_UINT32:
@@ -76,6 +80,7 @@ void BLEWrapper::writeValue(float unscaled) {
 		
 		case BLE2904::FORMAT_UINT32:
 		case BLE2904::FORMAT_SINT32:
+    case BLE2904::FORMAT_FLOAT32:
 		default:
 			length = 4;
 			break;
