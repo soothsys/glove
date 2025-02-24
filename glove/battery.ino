@@ -131,10 +131,7 @@ void battery_loop(void) {
     }
     
     m_levelWrapper.writeValue(level);
-    m_levelCharacteristic.notify();
     m_criticalWrapper.writeValue(critical);
-    m_criticalCharacteristic.notify();
     m_voltageWrapper.writeValue(vbat);
-    m_voltageCharacteristic.notify();
   }
 }
