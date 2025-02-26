@@ -55,11 +55,10 @@ void setup(void) {
 	if (bme688_init(i2c_address_bme688)) {
 		nSensors++;
 	}
-
   if (as7341_init(i2c_address_as7341)) {
     nSensors++;
   }
-	
+
 	if (nSensors == 0) {
 		ERROR_HALT("Failed to initialise any sensors");
 	}

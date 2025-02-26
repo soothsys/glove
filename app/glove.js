@@ -17,6 +17,8 @@ const BLE_FORMAT_SINT16 = 0x0E;
 const BLE_FORMAT_SINT32 = 0x10;
 const BLE_FORMAT_FLOAT32 = 0x14;
 
+const AS7341_GAIN_UUID = 'd5b7ab0d-aab7-4016-8dfa-6b1977fa4870';
+
 const BLE_UNITS = new Map([
 	[0x2700, ''], //Unitless
 	[0x2724, 'Pa'],
@@ -26,6 +28,8 @@ const BLE_UNITS = new Map([
 	[0x27C4, 'ppm'],
 	[0x27C5, 'ppb']
 ]);
+
+const AS7341_GAIN_SETTINGS = ['x0.5', 'x1', 'x2', 'x4', 'x8', 'x16', 'x32', 'x64', 'x128', 'x256', 'x512'];
 
 const supportedServices = new Map([
 	[BluetoothUUID.canonicalUUID(0x180F), 'Battery'],
@@ -42,6 +46,7 @@ const bttnConnect = document.getElementById('bttnConnect');
 const servicesArea = document.getElementById('servicesArea');
 
 let bleServer;
+let gainCharacteristic;
 
 bttnConnect.addEventListener('click', bluetoothConnect);
 
@@ -153,31 +158,91 @@ function initService(service) {
 }
 
 function initCharacteristics(table, characteristics) {
-	const decoder = new TextDecoder();
-
 	for (const characteristic of characteristics) {
-		let characteristicName = '';
-		characteristic.getDescriptor(NAME_DESCRIPTOR_UUID).then(nameDescriptor => {
-			return nameDescriptor.readValue();
-		}).then(arrBuffer => {
-			characteristicName = decoder.decode(arrBuffer);
-			console.log('Found characteristic "', characteristicName, '" with UUID "', characteristic.uuid, '"');
-			return characteristic.getDescriptor(PRES_DESCRIPTOR_UUID);
-		}).then(presDescriptor => {
-			return presDescriptor.readValue();
-		}).then(presDataView => {
-			const presInfo = readPresInfo(presDataView);
-			if (presInfo) {
-				presInfoCache.set(characteristic.uuid, presInfo);
-				characteristic.readValue().then(valDataView => {
-					showCharacteristic(table, characteristic.uuid, characteristicName);
-					updateVal(characteristic.uuid, valDataView, presInfo);
-					characteristic.addEventListener('characteristicvaluechanged', onNotify);
-					characteristic.startNotifications();
-					console.log('Started notifications for UUID "', characteristic.uuid, '"');
-				});
-			}
-		});
+		if (characteristic.uuid == AS7341_GAIN_UUID) {
+			handleAS7341Gain(table, characteristic); //Special handling
+		} else {
+			initCharacteristic(table, characteristic);
+		}
+	}
+}
+
+function initCharacteristic(table, characteristic) {
+	const decoder = new TextDecoder();
+	let characteristicName = '';
+
+	characteristic.getDescriptor(NAME_DESCRIPTOR_UUID).then(nameDescriptor => {
+		return nameDescriptor.readValue();
+	}).then(arrBuffer => {
+		characteristicName = decoder.decode(arrBuffer);
+		console.log('Found characteristic "', characteristicName, '" with UUID "', characteristic.uuid, '"');
+		return characteristic.getDescriptor(PRES_DESCRIPTOR_UUID);
+	}).then(presDescriptor => {
+		return presDescriptor.readValue();
+	}).then(presDataView => {
+		const presInfo = readPresInfo(presDataView);
+		if (presInfo) {
+			presInfoCache.set(characteristic.uuid, presInfo);
+			characteristic.readValue().then(valDataView => {
+				showCharacteristic(table, characteristic.uuid, characteristicName);
+				updateVal(characteristic.uuid, valDataView, presInfo);
+				characteristic.addEventListener('characteristicvaluechanged', onNotify);
+				characteristic.startNotifications();
+				console.log('Started notifications for UUID "', characteristic.uuid, '"');
+			});
+		}
+	});
+}
+
+function handleAS7341Gain(table, characteristic) {
+	characteristic.readValue().then(dataView => {
+		let gainIndex = dataView.getUint8();
+		if (gainIndex >= AS7341_GAIN_SETTINGS.length) {
+			console.log('Invalid gain index: ', gainIndex);
+			gainIndex = 0;
+		} else {
+			console.log('AS7341 gain is set to ', AS7341_GAIN_SETTINGS[gainIndex]);
+		}
+
+		gainCharacteristic = characteristic;
+		showAS7341Gain(table, gainIndex);
+	});
+}
+
+function showAS7341Gain(table, gainIndex) {
+	let row = document.createElement('tr');
+	table.appendChild(row);
+	
+	let nameCell = document.createElement('td');
+	nameCell.innerHTML = 'Gain: ';
+	row.appendChild(nameCell);
+
+	let valCell = document.createElement('td');
+	row.appendChild(valCell);
+
+	let dropdown = document.createElement('select');
+	valCell.appendChild(dropdown);
+	AS7341_GAIN_SETTINGS.forEach(x => {
+		let option = document.createElement('option');
+		option.innerHTML = x;
+		dropdown.appendChild(option);
+	});
+
+	dropdown.value = AS7341_GAIN_SETTINGS[gainIndex];
+	dropdown.id = 'ddGain';
+	dropdown.selected = 'selected';
+	dropdown.addEventListener('change', gainChanged);
+}
+
+function gainChanged() {
+	let gainIndex = document.getElementById('ddGain').selectedIndex;
+	if (gainIndex >= AS7341_GAIN_SETTINGS.length) {
+		gainIndex = 0;
+	}
+
+	if (gainCharacteristic) {
+		let arr = new Uint8Array([gainIndex]);
+		gainCharacteristic.writeValueWithoutResponse(arr.buffer);
 	}
 }
 

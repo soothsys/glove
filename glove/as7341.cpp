@@ -16,7 +16,8 @@
 #define SAMPLE_TIME 1000 //milliseconds
 
 #define BLE_INST_ID 0
-#define NUM_CHARACTERISTICS 10
+#define NUM_SENSOR_CHARACTERISTICS 10
+#define NUM_CHARACTERISTICS (NUM_SENSOR_CHARACTERISTICS + 1) //Add 1 for gain characeristic
 
 #define BLE_SERVICE_UUID BLEUUID((uint16_t)0x054D)
 #define LIGHT_415NM_UUID "5dc8e630-d5d9-4829-a8f1-9e134ceba7a2"
@@ -29,10 +30,14 @@
 #define LIGHT_680NM_UUID "e75ed433-6c87-4c78-bdbd-6b8d0398f237"
 #define LIGHT_CLEAR_UUID "0091c8af-1571-4857-ad20-3979ad0988a6"
 #define LIGHT_NIR_UUID "95dadecf-e892-4b3b-b231-1652e1b80e45"
+#define GAIN_UUID "d5b7ab0d-aab7-4016-8dfa-6b1977fa4870"
 
 #define LIGHT_FORMAT BLE2904::FORMAT_UINT16
+#define GAIN_FORMAT BLE2904::FORMAT_UINT8
 #define LIGHT_EXPONENT -2
+#define GAIN_EXPONENT 0
 #define LIGHT_UNIT BLEUnit::Unitless
+#define GAIN_UNIT BLEUnit::Unitless
 
 #define LIGHT_415NM_NAME "Violet (415nm)"
 #define LIGHT_445NM_NAME "Dark blue (445nm)"
@@ -44,6 +49,7 @@
 #define LIGHT_680NM_NAME "Red (680nm)"
 #define LIGHT_CLEAR_NAME "Clear"
 #define LIGHT_NIR_NAME "Near infrared"
+#define GAIN_NAME "Gain"
 
 static BLECharacteristic m_characteristics[] = {
   BLECharacteristic(LIGHT_415NM_UUID, BLECharacteristic::PROPERTY_READ | BLECharacteristic::PROPERTY_NOTIFY),
@@ -57,6 +63,8 @@ static BLECharacteristic m_characteristics[] = {
   BLECharacteristic(LIGHT_CLEAR_UUID, BLECharacteristic::PROPERTY_READ | BLECharacteristic::PROPERTY_NOTIFY),
   BLECharacteristic(LIGHT_NIR_UUID, BLECharacteristic::PROPERTY_READ | BLECharacteristic::PROPERTY_NOTIFY)
 };
+
+static BLECharacteristic m_gainCharacteristic(GAIN_UUID, BLECharacteristic::PROPERTY_READ | BLECharacteristic::PROPERTY_WRITE);
 
 static BLEWrapper m_wrappers[] = {
   BLEWrapper(&(m_characteristics[0]), LIGHT_415NM_NAME, LIGHT_FORMAT, LIGHT_EXPONENT, LIGHT_UNIT),
@@ -73,6 +81,48 @@ static BLEWrapper m_wrappers[] = {
 
 static Adafruit_AS7341 m_sensor;
 static unsigned long m_lastTime;
+
+class MyCharacteristicCallbacks: public BLECharacteristicCallbacks {
+  #define NUM_GAINS 11
+  const as7341_gain_t m_gains[NUM_GAINS] = {
+    AS7341_GAIN_0_5X,
+    AS7341_GAIN_1X,
+    AS7341_GAIN_2X,
+    AS7341_GAIN_4X,
+    AS7341_GAIN_8X,
+    AS7341_GAIN_16X,
+    AS7341_GAIN_32X,
+    AS7341_GAIN_64X,
+    AS7341_GAIN_128X,
+    AS7341_GAIN_256X,
+    AS7341_GAIN_512X
+  };
+
+  void onWrite(BLECharacteristic *pCharacteristic) {
+    uint8_t *data = pCharacteristic->getData();
+    if (data == NULL) {
+      ERROR("Write to sensor gain characteristic contains no data");
+    } else if (*data >= NUM_GAINS) {
+      ERROR("Attempt to set sensor gain to invalid index: %d", *data);
+    } else {
+      m_sensor.setGain(m_gains[*data]);
+      Serial.print("AS7341 gain set to index: ");
+      Serial.println(*data);
+    }
+  }
+
+  void onRead(BLECharacteristic *pCharacteristic) {
+    uint8_t i;
+    as7341_gain_t gain = m_sensor.getGain();
+    for (i = 0; i < NUM_GAINS; i++) {
+      if (m_gains[i] == gain) {
+        break;
+      }
+    }
+
+    pCharacteristic->setValue(&i, sizeof(i));
+  }
+};
 
 bool as7341_init(i2c_address_t addr) {
   if (!m_sensor.begin(addr)) {
@@ -97,9 +147,12 @@ bool as7341_addService(BLEServer *pServer) {
   }
   
   int i;
-  for (i = 0; i < NUM_CHARACTERISTICS; i++) {
+  for (i = 0; i < NUM_SENSOR_CHARACTERISTICS; i++) {
     pService->addCharacteristic(&(m_characteristics[i]));
   }
+
+  pService->addCharacteristic(&m_gainCharacteristic);
+  m_gainCharacteristic.setCallbacks(new MyCharacteristicCallbacks());
 
   pService->start();
   return true;
