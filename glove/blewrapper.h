@@ -12,14 +12,16 @@
  * https://www.bluetooth.com/wp-content/uploads/Files/Specification/HTML/Assigned_Numbers/out/en/Assigned_Numbers.pdf
  */
 enum class BLEUnit {
-	Unitless	= 0x2700,
-	Pascal		= 0x2724,
-  Volt      = 0x2728,
-  uTelsa    = 0x272D,
-	DegC	  	= 0x272F,
-	Percent		= 0x27AD,
-	PPM			  = 0x27C4,
-  PPB       = 0x27C5
+	Unitless	             = 0x2700,
+  MetresPerSecondSquared = 0x2713,
+	Pascal		             = 0x2724,
+  Volt                   = 0x2728,
+  uTelsa                 = 0x272D,
+	DegC	  	             = 0x272F,
+  RadsPerSecond          = 0x2743,
+	Percent		             = 0x27AD,
+	PPM			               = 0x27C4,
+  PPB                    = 0x27C5
 };
 
 class BLEWrapper {
