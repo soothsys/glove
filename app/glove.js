@@ -22,6 +22,7 @@ const AS7341_GAIN_UUID = 'd5b7ab0d-aab7-4016-8dfa-6b1977fa4870';
 const BLE_UNITS = new Map([
 	[0x2700, ''], //Unitless
 	[0x2713, 'm/s<sup>2</sup>'],
+	[0x2720, 'rad'],
 	[0x2724, 'Pa'],
 	[0x2728, 'V'],
 	[0x272D, 'uT'],
