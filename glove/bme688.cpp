@@ -97,6 +97,7 @@ static BLEWrapper m_runinWrapper(&m_runinCharacteristic, RUNIN_NAME, RUNIN_FORMA
 static Bsec2 m_envSensor;
 static bool m_stabilised = false;
 static bool m_runIn = false;
+static bool m_ready = false;
 
 static void newDataCallback(const bme68xData data, const bsecOutputs outputs, Bsec2 bsec);  //Hack gets around a type definition error in the library
 
@@ -211,14 +212,20 @@ bool bme688_init(i2c_address_t addr) {
   }
 
   m_envSensor.attachCallback(newDataCallback);
+  m_ready = true;
   return true;
 }
 
 bool bme688_addService(BLEServer *pServer) {
+  if (!m_ready) {
+    return false;
+  }
+
   int numHandles = BLEWrapper::calcNumHandles(NUM_CHARACTERISTICS);
   BLEService *pService = pServer->createService(BLE_SERVICE_UUID, numHandles, BLE_INST_ID);
   if (pService == NULL) {
     ERROR("Cannot add BLE service");
+    m_ready = false;
     return false;
   }
 
@@ -237,7 +244,7 @@ bool bme688_addService(BLEServer *pServer) {
 }
 
 void bme688_loop(void) {
-  if (!m_envSensor.run()) {
+  if (m_ready && !m_envSensor.run()) {
     handleError("reading sensor data");
   }
 }

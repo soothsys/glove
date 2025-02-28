@@ -50,6 +50,7 @@ static BLEWrapper m_voltageWrapper(&m_voltageCharacteristic, VOLTAGE_NAME, VOLTA
 static float m_avgBuf[NUM_AVERAGE_SAMPLES];
 static int m_avgBufPos = 0;
 static unsigned long m_lastTime;
+static bool m_ready = false;
 
 static float readVoltage(void) {
   return VBAT_SCALE * (float)analogReadMilliVolts(PIN_VBAT);
@@ -63,14 +64,20 @@ bool battery_init(void) {
   }
 
   m_lastTime = millis();
+  m_ready = true;
   return true;
 }
 
 bool battery_addService(BLEServer *pServer) {
+  if (!m_ready) {
+    return false;
+  }
+
   int numHandles = BLEWrapper::calcNumHandles(NUM_CHARACTERISTICS);
   BLEService *pService = pServer->createService(BLE_SERVICE_UUID, numHandles, BLE_INST_ID);
   if (pService == NULL) {
     ERROR("Cannot add BLE service");
+    m_ready = false;
     return false;
   }
 
@@ -88,7 +95,7 @@ static void printBatteryVoltage(float vbat) {
   Serial.println("V)");
 }
 
-float getAverage(float next) {
+static float getAverage(float next) {
   m_avgBuf[m_avgBufPos++] = next;
   if (m_avgBufPos >= NUM_AVERAGE_SAMPLES) {
     m_avgBufPos = 0;
@@ -105,7 +112,7 @@ float getAverage(float next) {
 
 void battery_loop(void) {
   unsigned long now = millis();
-  if (now - m_lastTime >= SAMPLE_TIME) {
+  if (m_ready && (now - m_lastTime >= SAMPLE_TIME)) {
     m_lastTime = now;
 
     float vbat = getAverage(readVoltage());

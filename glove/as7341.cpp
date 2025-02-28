@@ -81,6 +81,7 @@ static BLEWrapper m_wrappers[] = {
 
 static Adafruit_AS7341 m_sensor;
 static unsigned long m_lastTime;
+static bool m_ready = false;
 
 class MyCharacteristicCallbacks: public BLECharacteristicCallbacks {
   #define NUM_GAINS 11
@@ -135,14 +136,20 @@ bool as7341_init(i2c_address_t addr) {
   m_sensor.setGain(DEFAULT_GAIN);
 
   m_lastTime = millis();
+  m_ready = true;
   return true;
 }
 
 bool as7341_addService(BLEServer *pServer) {
+  if (!m_ready) {
+    return false;
+  }
+
   int numHandles = BLEWrapper::calcNumHandles(NUM_CHARACTERISTICS);
   BLEService *pService = pServer->createService(BLE_SERVICE_UUID, numHandles, BLE_INST_ID);
   if (pService == NULL) {
     ERROR("Cannot add BLE service");
+    m_ready = false;
     return false;
   }
   
@@ -160,7 +167,7 @@ bool as7341_addService(BLEServer *pServer) {
 
 void as7341_loop(void) {
   unsigned long now = millis();
-  if (now - m_lastTime >= SAMPLE_TIME) {
+  if (m_ready && (now - m_lastTime >= SAMPLE_TIME)) {
     m_lastTime = now;
 
     uint16_t readings[NUM_CHANNELS];
