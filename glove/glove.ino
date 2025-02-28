@@ -21,6 +21,7 @@
 #include "bme688.h"
 #include "battery.h"
 #include "as7341.h"
+#include "lsm9ds1.h"
 
 #define BAUD_RATE			115200
 
@@ -58,6 +59,9 @@ void setup(void) {
   if (as7341_init(i2c_address_as7341)) {
     nSensors++;
   }
+  if (lsm9ds1_init()) {
+    nSensors++;
+  }
 
 	if (nSensors == 0) {
 		ERROR_HALT("Failed to initialise any sensors");
@@ -79,6 +83,9 @@ void setup(void) {
   if (!as7341_addService(pServer)) {
     ERROR("Failed to add AS7341 service");
   }
+  if (!lsm9ds1_addService(pServer)) {
+    ERROR("Failed to add LSM9DS1 service");
+  }
 	
 	pAdvert = pServer->getAdvertising();
 	if (pAdvert == NULL) {
@@ -94,5 +101,6 @@ void loop(void) {
     battery_loop();
 		bme688_loop();
     as7341_loop();
+    lsm9ds1_loop();
 	}
 }

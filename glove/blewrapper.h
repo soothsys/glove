@@ -15,6 +15,7 @@ enum class BLEUnit {
 	Unitless	= 0x2700,
 	Pascal		= 0x2724,
   Volt      = 0x2728,
+  uTelsa    = 0x272D,
 	DegC	  	= 0x272F,
 	Percent		= 0x27AD,
 	PPM			  = 0x27C4,

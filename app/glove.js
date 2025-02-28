@@ -23,6 +23,7 @@ const BLE_UNITS = new Map([
 	[0x2700, ''], //Unitless
 	[0x2724, 'Pa'],
 	[0x2728, 'V'],
+	[0x272D, 'uT'],
 	[0x272F, '°C'],
 	[0x27AD, '%'],
 	[0x27C4, 'ppm'],
@@ -34,7 +35,8 @@ const AS7341_GAIN_SETTINGS = ['x0.5', 'x1', 'x2', 'x4', 'x8', 'x16', 'x32', 'x64
 const supportedServices = new Map([
 	[BluetoothUUID.canonicalUUID(0x180F), 'Battery'],
 	[BluetoothUUID.canonicalUUID(0x181A), 'Environmental Sensor'],
-	[BluetoothUUID.canonicalUUID(0x054D), 'Light Sensor']
+	[BluetoothUUID.canonicalUUID(0x054D), 'Light Sensor'],
+	['606a0692-1e69-422a-9f73-de87d239aade', 'Inertial measurement unit']
 ]);
 
 const presInfoCache = new Map();
