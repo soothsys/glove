@@ -129,6 +129,7 @@ bool as7341_init(i2c_address_t addr) {
   m_sensor.setATIME(DEFAULT_ATIME);
   m_sensor.setASTEP(DEFAULT_ASTEP);
   m_sensor.setGain(AS7341_GAIN_LIST[m_gainIndex]);
+  m_sensor.startReading();
 
   m_lastTime = millis();
   m_ready = true;
@@ -181,18 +182,24 @@ int autogain(int currGainIndex, uint16_t *readings) {
   return currGainIndex;
 }
 
-void as7341_loop(void) {
-  static unsigned long lastLoopTime = 0;
-  if (!m_ready) {
-    return;
+static void reportReadings(uint16_t *readings) {
+  int nChannel, nCharacteristic = 0;
+  for (nChannel = 0; nChannel < NUM_CHANNELS; nChannel++) {
+    if ((nChannel != 4) && (nChannel != 5)) {  //Skip channels 4 and 5 - these are duplicates
+      float corrected = m_sensor.toBasicCounts(readings[nChannel]);
+      m_wrappers[nCharacteristic].writeValue(corrected);
+      nCharacteristic++;
+    }
   }
 
-  uint16_t readings[NUM_CHANNELS];
-  if (!m_sensor.readAllChannels(readings)) {
-    ERROR("Error reading sensor");
-    return;
+  if (m_gainChanged) {
+    m_gainChanged = false;
+    float gainVal = AS7341_GAIN_VALS[m_gainIndex];
+    m_gainWrapper.writeValue(gainVal);
   }
+}
 
+static void handleReadings(uint16_t *readings) {
   /*
    * Readings are reported at the "sample rate", but we actually sample the sensor continually.
    * This allows the autogain algorithm to react quickly.
@@ -200,22 +207,7 @@ void as7341_loop(void) {
   unsigned long now = millis();
   if (now - m_lastTime >= SAMPLE_TIME) {
     m_lastTime = now;
-
-    int nChannel, nCharacteristic = 0;
-    for (nChannel = 0; nChannel < NUM_CHANNELS; nChannel++) {
-      if ((nChannel != 4) && (nChannel != 5)) { //Skip channels 4 and 5 - these are duplicates
-        //float corrected = m_sensor.toBasicCounts(readings[nChannel]);
-        float corrected = (float)(readings[nChannel]);
-        m_wrappers[nCharacteristic].writeValue(corrected);
-        nCharacteristic++;
-      }
-    }
-
-    if (m_gainChanged) {
-      m_gainChanged = false;
-      float gainVal = AS7341_GAIN_VALS[m_gainIndex];
-      m_gainWrapper.writeValue(gainVal);
-    }
+    reportReadings(readings);
   }
 
   /*
@@ -227,5 +219,18 @@ void as7341_loop(void) {
   if ((newGainIndex != m_gainIndex) && m_sensor.setGain(newGain)) { //Only report gain change if applied successfully
     m_gainIndex = newGainIndex;
     m_gainChanged = true;
+  }
+}
+
+void as7341_loop(void) {
+  if (m_ready && m_sensor.checkReadingProgress()) {
+    uint16_t readings[NUM_CHANNELS];
+    if (m_sensor.getAllChannels(readings)) {
+      handleReadings(readings);
+    } else {
+      ERROR("Error reading sensor");
+    }
+
+    m_sensor.startReading();
   }
 }
