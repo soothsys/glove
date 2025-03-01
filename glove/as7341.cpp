@@ -8,9 +8,43 @@
 #include "blewrapper.h"
 #include "err.h"
 
+#define NUM_GAINS 11
+const as7341_gain_t AS7341_GAIN_LIST[NUM_GAINS] = {
+  AS7341_GAIN_0_5X,
+  AS7341_GAIN_1X,
+  AS7341_GAIN_2X,
+  AS7341_GAIN_4X,
+  AS7341_GAIN_8X,
+  AS7341_GAIN_16X,
+  AS7341_GAIN_32X,
+  AS7341_GAIN_64X,
+  AS7341_GAIN_128X,
+  AS7341_GAIN_256X,
+  AS7341_GAIN_512X
+};
+
+const float AS7341_GAIN_VALS[NUM_GAINS] = {
+  0.5f,
+  1.0f,
+  2.0f,
+  4.0f,
+  8.0f,
+  16.0f,
+  32.0f,
+  64.0f,
+  128.0f,
+  256.0f,
+  512.0f
+};
+
 #define DEFAULT_ATIME 100
 #define DEFAULT_ASTEP 999
-#define DEFAULT_GAIN AS7341_GAIN_256X
+#define DEFAULT_GAIN_INDEX 9
+
+#define AUTOGAIN_INCR_THRES 16384 //25% of UINT16_MAX
+#define AUTOGAIN_DECR_THRES 49152 //75% of UINT16_MAX
+#define AUTOGAIN_MIN_INDEX 0
+#define AUTOGAIN_MAX_INDEX (NUM_GAINS - 1)
 
 #define NUM_CHANNELS 12
 #define SAMPLE_TIME 1000 //milliseconds
@@ -33,9 +67,9 @@
 #define GAIN_UUID "d5b7ab0d-aab7-4016-8dfa-6b1977fa4870"
 
 #define LIGHT_FORMAT BLE2904::FORMAT_UINT16
-#define GAIN_FORMAT BLE2904::FORMAT_UINT8
+#define GAIN_FORMAT BLE2904::FORMAT_UINT16
 #define LIGHT_EXPONENT -2
-#define GAIN_EXPONENT 0
+#define GAIN_EXPONENT -1
 #define LIGHT_UNIT BLEUnit::Unitless
 #define GAIN_UNIT BLEUnit::Unitless
 
@@ -64,8 +98,6 @@ static BLECharacteristic m_characteristics[] = {
   BLECharacteristic(LIGHT_NIR_UUID, BLECharacteristic::PROPERTY_READ | BLECharacteristic::PROPERTY_NOTIFY)
 };
 
-static BLECharacteristic m_gainCharacteristic(GAIN_UUID, BLECharacteristic::PROPERTY_READ | BLECharacteristic::PROPERTY_WRITE);
-
 static BLEWrapper m_wrappers[] = {
   BLEWrapper(&(m_characteristics[0]), LIGHT_415NM_NAME, LIGHT_FORMAT, LIGHT_EXPONENT, LIGHT_UNIT),
   BLEWrapper(&(m_characteristics[1]), LIGHT_445NM_NAME, LIGHT_FORMAT, LIGHT_EXPONENT, LIGHT_UNIT),
@@ -79,51 +111,14 @@ static BLEWrapper m_wrappers[] = {
   BLEWrapper(&(m_characteristics[9]), LIGHT_NIR_NAME, LIGHT_FORMAT, LIGHT_EXPONENT, LIGHT_UNIT)
 };
 
+static BLECharacteristic m_gainCharacteristic(GAIN_UUID, BLECharacteristic::PROPERTY_READ | BLECharacteristic::PROPERTY_NOTIFY);
+static BLEWrapper m_gainWrapper(&m_gainCharacteristic, GAIN_NAME, GAIN_FORMAT, GAIN_EXPONENT, GAIN_UNIT);
+
 static Adafruit_AS7341 m_sensor;
+static int m_gainIndex = DEFAULT_GAIN_INDEX;
+static bool m_gainChanged = false;
 static unsigned long m_lastTime;
 static bool m_ready = false;
-
-class MyCharacteristicCallbacks: public BLECharacteristicCallbacks {
-  #define NUM_GAINS 11
-  const as7341_gain_t m_gains[NUM_GAINS] = {
-    AS7341_GAIN_0_5X,
-    AS7341_GAIN_1X,
-    AS7341_GAIN_2X,
-    AS7341_GAIN_4X,
-    AS7341_GAIN_8X,
-    AS7341_GAIN_16X,
-    AS7341_GAIN_32X,
-    AS7341_GAIN_64X,
-    AS7341_GAIN_128X,
-    AS7341_GAIN_256X,
-    AS7341_GAIN_512X
-  };
-
-  void onWrite(BLECharacteristic *pCharacteristic) {
-    uint8_t *data = pCharacteristic->getData();
-    if (data == NULL) {
-      ERROR("Write to sensor gain characteristic contains no data");
-    } else if (*data >= NUM_GAINS) {
-      ERROR("Attempt to set sensor gain to invalid index: %d", *data);
-    } else {
-      m_sensor.setGain(m_gains[*data]);
-      Serial.print("AS7341 gain set to index: ");
-      Serial.println(*data);
-    }
-  }
-
-  void onRead(BLECharacteristic *pCharacteristic) {
-    uint8_t i;
-    as7341_gain_t gain = m_sensor.getGain();
-    for (i = 0; i < NUM_GAINS; i++) {
-      if (m_gains[i] == gain) {
-        break;
-      }
-    }
-
-    pCharacteristic->setValue(&i, sizeof(i));
-  }
-};
 
 bool as7341_init(i2c_address_t addr) {
   if (!m_sensor.begin(addr)) {
@@ -133,7 +128,7 @@ bool as7341_init(i2c_address_t addr) {
 
   m_sensor.setATIME(DEFAULT_ATIME);
   m_sensor.setASTEP(DEFAULT_ASTEP);
-  m_sensor.setGain(DEFAULT_GAIN);
+  m_sensor.setGain(AS7341_GAIN_LIST[m_gainIndex]);
 
   m_lastTime = millis();
   m_ready = true;
@@ -159,30 +154,78 @@ bool as7341_addService(BLEServer *pServer) {
   }
 
   pService->addCharacteristic(&m_gainCharacteristic);
-  m_gainCharacteristic.setCallbacks(new MyCharacteristicCallbacks());
-
   pService->start();
+  m_gainWrapper.writeValue(AS7341_GAIN_VALS[m_gainIndex]);
   return true;
 }
 
-void as7341_loop(void) {
-  unsigned long now = millis();
-  if (m_ready && (now - m_lastTime >= SAMPLE_TIME)) {
-    m_lastTime = now;
-
-    uint16_t readings[NUM_CHANNELS];
-    if (!m_sensor.readAllChannels(readings)) {
-      ERROR("Error reading sensor");
-      return;
+int autogain(int currGainIndex, uint16_t *readings) {
+  uint16_t maxReading = 0;
+  int i;
+  for (i = 0; i < NUM_CHANNELS; i++) {
+    if (readings[i] > maxReading) {
+      maxReading = readings[i];
     }
+  }
+
+  if (maxReading > AUTOGAIN_DECR_THRES) { //Decrease gain
+    if (currGainIndex > AUTOGAIN_MIN_INDEX) {
+      currGainIndex--;
+    }
+  } else if (maxReading < AUTOGAIN_DECR_THRES) {
+    if (currGainIndex < AUTOGAIN_MAX_INDEX) {
+      currGainIndex++;
+    }
+  }
+
+  return currGainIndex;
+}
+
+void as7341_loop(void) {
+  static unsigned long lastLoopTime = 0;
+  if (!m_ready) {
+    return;
+  }
+
+  uint16_t readings[NUM_CHANNELS];
+  if (!m_sensor.readAllChannels(readings)) {
+    ERROR("Error reading sensor");
+    return;
+  }
+
+  /*
+   * Readings are reported at the "sample rate", but we actually sample the sensor continually.
+   * This allows the autogain algorithm to react quickly.
+   */
+  unsigned long now = millis();
+  if (now - m_lastTime >= SAMPLE_TIME) {
+    m_lastTime = now;
 
     int nChannel, nCharacteristic = 0;
     for (nChannel = 0; nChannel < NUM_CHANNELS; nChannel++) {
       if ((nChannel != 4) && (nChannel != 5)) { //Skip channels 4 and 5 - these are duplicates
-        float corrected = m_sensor.toBasicCounts(readings[nChannel]);
+        //float corrected = m_sensor.toBasicCounts(readings[nChannel]);
+        float corrected = (float)(readings[nChannel]);
         m_wrappers[nCharacteristic].writeValue(corrected);
         nCharacteristic++;
       }
     }
+
+    if (m_gainChanged) {
+      m_gainChanged = false;
+      float gainVal = AS7341_GAIN_VALS[m_gainIndex];
+      m_gainWrapper.writeValue(gainVal);
+    }
+  }
+
+  /*
+   * Do any gain changes AFTER reporting the readings so that we don't screw up gain correction.
+   * Gain change will apply to next reading
+   */
+  int newGainIndex = autogain(m_gainIndex, readings);
+  as7341_gain_t newGain = AS7341_GAIN_LIST[newGainIndex];
+  if ((newGainIndex != m_gainIndex) && m_sensor.setGain(newGain)) { //Only report gain change if applied successfully
+    m_gainIndex = newGainIndex;
+    m_gainChanged = true;
   }
 }
