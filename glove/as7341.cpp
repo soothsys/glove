@@ -37,12 +37,18 @@ const float AS7341_GAIN_VALS[NUM_GAINS] = {
   512.0f
 };
 
-#define DEFAULT_ATIME 100
-#define DEFAULT_ASTEP 999
+/*
+ * Integration time = (ATIME + 1) * (ASTEP + 1) * 2.78us
+ *                  = (599 + 1) * (29 + 1) * 2.78us
+ *                  = 50ms
+ */
+#define DEFAULT_ATIME 29
+#define DEFAULT_ASTEP 599
 #define DEFAULT_GAIN_INDEX 9
+#define MAX_ADC_COUNTS ((DEFAULT_ATIME + 1) * (DEFAULT_ASTEP + 1))
 
-#define AUTOGAIN_INCR_THRES 16384 //25% of UINT16_MAX
-#define AUTOGAIN_DECR_THRES 49152 //75% of UINT16_MAX
+#define AUTOGAIN_INCR_THRES (25 * (MAX_ADC_COUNTS / 100))
+#define AUTOGAIN_DECR_THRES (75 * (MAX_ADC_COUNTS / 100))
 #define AUTOGAIN_MIN_INDEX 0
 #define AUTOGAIN_MAX_INDEX (NUM_GAINS - 1)
 
