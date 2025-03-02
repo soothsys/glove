@@ -14,10 +14,21 @@
 	</div>
 	
 	<div class="buttonBox">
-		<button type="button" id="bttnConnect">Connect</button>
+		<button type="button" id="bttnConnect" class="connect">Connect</button>
 	</div>
 
-	<div id="servicesArea"></div>
+	<div class="serviceBox">
+		<table>
+			<tr><td class="serviceName">Logging</td></tr>
+			<tr><td>Log every: <input type="number" id="logPeriod" min="1" max="100" value="10"> seconds</td></tr>
+			<tr><td>
+				<button type="button" id="bttnLogStart" class="disabled" disabled="true">Start</button>
+				<button type="button" id="bttnLogStop" class="disabled" disabled="true">Stop</button>
+			</td></tr>
+		</table>
+	</div>
+
+	<span id="servicesArea"></div>
 </body>
 
 </html>

@@ -19,7 +19,7 @@ const BLE_FORMAT_FLOAT32 = 0x14;
 
 const BLE_UNITS = new Map([
 	[0x2700, ''], //Unitless
-	[0x2713, 'm/s<sup>2</sup>'],
+	[0x2713, 'm/s2'],
 	[0x2720, 'rad'],
 	[0x2724, 'Pa'],
 	[0x2728, 'V'],
@@ -35,20 +35,28 @@ const supportedServices = new Map([
 	[BluetoothUUID.canonicalUUID(0x180F), 'Battery'],
 	[BluetoothUUID.canonicalUUID(0x181A), 'Environmental Sensor'],
 	[BluetoothUUID.canonicalUUID(0x054D), 'Light Sensor'],
-	['606a0692-1e69-422a-9f73-de87d239aade', 'Inertial measurement unit']
+	['606a0692-1e69-422a-9f73-de87d239aade', 'Inertial Measurement Unit']
 ]);
 
 const presInfoCache = new Map();
+const characteristicList = new Map();
+const log = new Map();
 
 const statusBox = document.getElementById('statusBox');
 const statusMessage = document.getElementById('statusMessage');
 const txtStatus = document.getElementById('txtStatus');
 const bttnConnect = document.getElementById('bttnConnect');
+const bttnLogStart = document.getElementById('bttnLogStart');
+const bttnLogStop = document.getElementById('bttnLogStop');
+const logPeriod = document.getElementById('logPeriod');
 const servicesArea = document.getElementById('servicesArea');
 
 let bleServer;
+let logTimer;
 
 bttnConnect.addEventListener('click', bluetoothConnect);
+bttnLogStart.addEventListener('click', logStart);
+bttnLogStop.addEventListener('click', logStop);
 
 function statusReady(message = '') {
 	statusBox.className = 'status ready';
@@ -65,6 +73,16 @@ function statusFail(message = '') {
 	statusMessage.innerHTML = message;
 }
 
+function disableButton(bttn) {
+	bttn.disabled = true;
+	bttn.classList.add('disabled');
+}
+
+function enableButton(bttn) {
+	bttn.disabled = false;
+	bttn.classList.remove('disabled');
+}
+
 function bluetoothConnect() {
 	if (bleServer && bleServer.connected) {
 		console.log('Already connected');
@@ -76,9 +94,10 @@ function bluetoothConnect() {
 		return;
 	}
 
-	bttnConnect.disabled = true;
-	bttnConnect.className = 'disabled';
+	presInfoCache.clear();
+	characteristicList.clear();
 
+	disableButton(bttnConnect);
 	console.log('Opening Bluetooth connection...');
 	navigator.bluetooth.requestDevice({
 		filters: [{ name: DEVICE_NAME }],
@@ -87,6 +106,8 @@ function bluetoothConnect() {
 		.then(device => {
 			console.log('Connected to: ', device.name);
 			statusOk('Connected to ' + device.name);
+			enableButton(bttnLogStart);
+			disableButton(bttnLogStop);
 			device.addEventListener('gattservicedisconnected', onDisconnect);
 			return device.gatt.connect();
 		})
@@ -103,8 +124,7 @@ function bluetoothConnect() {
 
 			console.log('Error connecting to Bluetooth device: ', error);
 			statusFail('Error connecting to Bluetooth device');
-			bttnConnect.disabled = false;
-			bttnConnect.className = '';
+			enableButton(bttnConnect);
 		});
 }
 
@@ -112,8 +132,9 @@ function onDisconnect(event) {
 	console.log('Disconnected from: ', event.target.device.name);
 	statusReady('Disconnected');
 	servicesArea.replaceChildren();
-	bttnConnect.disabled = false;
-	bttnConnect.className = '';
+	logStop();
+	disableButton(bttnLogStart);
+	enableButton(bttnConnect);
 }
 
 function getSupportedUuids() {
@@ -153,11 +174,11 @@ function initService(service) {
 	titleRow.appendChild(titleCell);
 
 	service.getCharacteristics().then(characteristics => {
-		initCharacteristics(serviceDiv, characteristics);
+		initCharacteristics(table, serviceName, characteristics);
 	});
 }
 
-function initCharacteristics(table, characteristics) {
+function initCharacteristics(table, serviceName, characteristics) {
 	const decoder = new TextDecoder();
 	for (const characteristic of characteristics) {
 		let characteristicName = '';
@@ -174,6 +195,13 @@ function initCharacteristics(table, characteristics) {
 			if (presInfo) {
 				presInfoCache.set(characteristic.uuid, presInfo);
 				characteristic.readValue().then(valDataView => {
+					const characteristicInfo = {
+						name: characteristicName,
+						serviceName: serviceName,
+						lastEntry: ''
+					};
+
+					characteristicList.set(characteristic.uuid, characteristicInfo);
 					showCharacteristic(table, characteristic.uuid, characteristicName);
 					updateVal(characteristic.uuid, valDataView, presInfo);
 					characteristic.addEventListener('characteristicvaluechanged', onNotify);
@@ -222,16 +250,15 @@ function onNotify(event) {
 	}
 }
 
-function updateVal(uuid, dataView, presInfo) {
-	const valCell = document.getElementById(uuid);
+function updateVal(characteristicUuid, dataView, presInfo) {
+	const valCell = document.getElementById(characteristicUuid);
 	if (!valCell) {
 		console.log('No target cell found for UUID "', uuid, '"');
 	} else {
 		let val = readValue(dataView, presInfo);
 		val = formatValue(val, presInfo);
-
-		const unit = getUnitString(presInfo);
-		valCell.innerHTML = val + ' ' + unit;
+		cacheValue(characteristicUuid, val);
+		valCell.innerHTML = val + ' ' + getUnitString(presInfo);
 	}
 }
 
@@ -273,7 +300,7 @@ function readValue(dataView, presInfo) {
 			length = 4;
 			decodeFunc = (x) => { return x.getInt32(0, IS_LITTLE_ENDIAN); };
 			break;
-		
+
 		case BLE_FORMAT_FLOAT32:
 			length = 4;
 			decodeFunc = (x) => { return x.getFloat32(0, IS_LITTLE_ENDIAN); };
@@ -291,10 +318,6 @@ function readValue(dataView, presInfo) {
 	let rawVal = 0;
 	if (decodeFunc) {
 		rawVal = decodeFunc(dataView);
-	}
-
-	if (presInfo.format == BLE_FORMAT_FLOAT32) {
-		console.log(rawVal);
 	}
 
 	if (presInfo.format == BLE_FORMAT_BOOLEAN) { //Ignore exponent for boolean
@@ -327,4 +350,96 @@ function getUnitString(presInfo) {
 		console.log('Unknown BLE unit definition "', presInfo.unit, '"');
 		return '';
 	}
+}
+
+function cacheValue(characteristicUuid, valStr) {
+	if (characteristicList.has(characteristicUuid)) {
+		const characteristicInfo = characteristicList.get(characteristicUuid);
+		characteristicInfo.lastEntry = valStr;
+	}
+}
+
+function logStart() {
+	disableButton(bttnLogStart);
+	enableButton(bttnLogStop);
+	log.clear();
+	logTimer = setInterval(updateLog, logPeriod.value);
+}
+
+function logStop() {
+	enableButton(bttnLogStart);
+	disableButton(bttnLogStop);
+	clearInterval(logTimer);
+
+	if (log.size > 0) {
+		const logstr = printLog();
+		saveLog(logstr);
+	}
+}
+
+function updateLog() {
+	const logEntry = new Map();
+	characteristicList.forEach((characteristicInfo, uuid, map) => {
+		logEntry.set(uuid, characteristicInfo.lastEntry);
+	});
+
+	const timestamp = printTimestamp();
+	log.set(timestamp, logEntry);
+}
+
+function printLog() {
+	let csv = 'Timestamp,';
+	let line2 = ',';
+	let line3 = ',';
+	characteristicList.forEach((characteristicInfo, uuid, map) => {
+		csv += characteristicInfo.serviceName + ',';
+		line2 += characteristicInfo.name + ',';
+		if (presInfoCache.has(uuid)) {
+			const presInfo = presInfoCache.get(uuid);
+			line3 += getUnitString(presInfo);
+		}
+
+		line3 += ',';
+	});
+
+	csv += '\n' + line2 + '\n' + line3;
+
+	log.forEach((logEntry, timestamp, map) => {
+		csv += '\n' + timestamp + ',';
+		characteristicList.forEach((characteristicInfo, uuid, charactertisticMap) => {
+			if (logEntry.has(uuid)) {
+				csv += logEntry.get(uuid);
+			}
+
+			csv += ',';
+		});
+	});
+
+	csv += '\n';
+	return csv;
+}
+
+function printTimestamp() {
+	const timestamp = new Date();
+	let str = timestamp.getFullYear() + '/';
+	str += doPad(timestamp.getMonth() + 1) + '/'; //JS uses zero-indexed months for some reason
+	str += doPad(timestamp.getDate()) + ' ';
+	str += doPad(timestamp.getHours()) + ':';
+	str += doPad(timestamp.getMinutes()) + ':';
+	str += doPad(timestamp.getSeconds());
+	return str;
+}
+
+function doPad(num) {
+	return num.toString().padStart(2, 0);
+}
+
+function saveLog(logstr) {
+	const element = document.createElement('a');
+	element.setAttribute('href', 'data:text/csv;charset=utf-8,' + encodeURIComponent(logstr));
+	element.setAttribute('download', 'log.csv');
+	element.style.display = 'none';
+	document.body.appendChild(element);
+	element.click();
+	document.body.removeChild(element);
 }
