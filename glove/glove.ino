@@ -18,8 +18,9 @@
 
 #include "err.h"
 #include "i2c_address.h"
-#include "bme688.h"
+#include "powermgmt.h"
 #include "battery.h"
+#include "bme688.h"
 #include "as7341.h"
 #include "lsm9ds1.h"
 
@@ -50,6 +51,7 @@ void setup(void) {
 	Serial.begin(BAUD_RATE);
 	Wire.begin();
 	
+  powermgmt_init();
   battery_init();
 
 	int nSensors = 0;
@@ -97,6 +99,8 @@ void setup(void) {
 }
 
 void loop(void) {
+  powermgmt_loop();
+  
 	if (m_deviceConnected) {
     battery_loop();
 		bme688_loop();

@@ -1,9 +1,13 @@
 #include <stdbool.h>
 #include <Arduino.h>
 
+#include "powermgmt.h"
+
 #define ERR_LED_PIN			LED_BUILTIN		//Use default LED pin for now
+#define FLASH_TIME      200           //ms
 
 void err_init(void) {
+  digitalWrite(ERR_LED_PIN, LOW);
 	pinMode(ERR_LED_PIN, OUTPUT);
 }
 
@@ -13,12 +17,19 @@ static void innerPrint(bool halt, const char *module, const char *message) {
 	Serial.println(message);
 	
 	if (halt) {
+    unsigned long lastTime = 0;
+    bool state = HIGH;
 		Serial.println("Halting!");
+
 		while (1) {
-			digitalWrite(LED_BUILTIN, LOW);
-			delay(200);
-			digitalWrite(LED_BUILTIN, HIGH);
-			delay(200);
+      unsigned long now = millis();
+      if (now - lastTime >= FLASH_TIME) {
+  			digitalWrite(ERR_LED_PIN, state); //Flash LED
+        state = !state;
+        lastTime = now;
+      }
+
+      powermgmt_loop(); //Continue to monitor power button
 		}
 	}
 }
