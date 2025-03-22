@@ -24,12 +24,20 @@
 #include "as7341.h"
 #include "lsm9ds1.h"
 
-#define BAUD_RATE			115200
+#define PRINT_INTERVAL 1000000 //1 second in us
+#define BAUD_RATE			 115200
 
 #define BLE_SERVER_NAME		"SmartGlove"
 
-BLEAdvertising *pAdvert = NULL;
-bool m_deviceConnected = false;
+static BLEAdvertising *pAdvert = NULL;
+static bool m_deviceConnected = false;
+
+static unsigned long m_lastLoopTime;
+static unsigned long m_lastPrintTime;
+static unsigned long m_minLoopLength;
+static unsigned long m_maxLoopLength;
+static unsigned long m_avgLoopLength;
+static unsigned long m_numIterations;
 
 class MyServerCallbacks: public BLEServerCallbacks {
 	void onConnect(BLEServer *pServer) {
@@ -45,6 +53,24 @@ class MyServerCallbacks: public BLEServerCallbacks {
     }
 	}
 };
+
+static void resetLoopStats(void) {
+  m_minLoopLength = UINT32_MAX;
+  m_maxLoopLength = 0;
+  m_avgLoopLength = 0;
+  m_numIterations = 0;
+}
+
+static void printLoopStats(void) {
+  unsigned long avg = m_avgLoopLength / m_numIterations;
+  Serial.print("Loop statistics: min = ");
+  Serial.print(m_minLoopLength);
+  Serial.print("us, max = ");
+  Serial.print(m_maxLoopLength);
+  Serial.print("us, avg = ");
+  Serial.print(avg);
+  Serial.println("us");
+}
 
 void setup(void) {
 	err_init(); //Set up error LED pin
@@ -96,6 +122,9 @@ void setup(void) {
 	
 	pAdvert->start();
 	Serial.println("Waiting for client");
+
+  resetLoopStats();
+  m_lastLoopTime = m_lastPrintTime = micros();
 }
 
 void loop(void) {
@@ -107,4 +136,24 @@ void loop(void) {
     as7341_loop();
     lsm9ds1_loop();
 	}
+
+  unsigned long now = micros();
+  unsigned long duration = now - m_lastLoopTime;
+  m_lastLoopTime = now;
+  m_avgLoopLength += duration;
+  m_numIterations++;
+
+  if (duration < m_minLoopLength) {
+    m_minLoopLength = duration;
+  }
+
+  if (duration > m_maxLoopLength) {
+    m_maxLoopLength = duration;
+  }
+
+  if (now - m_lastPrintTime >= PRINT_INTERVAL) {
+    m_lastPrintTime = now;
+    printLoopStats();
+    resetLoopStats();
+  }
 }
