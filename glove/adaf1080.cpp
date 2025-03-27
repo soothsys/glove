@@ -66,9 +66,9 @@ typedef struct {
 #define SPI_BIT_ORDER MSBFIRST
 #define SPI_MODE SPI_MODE0
 
-#define PIN_PWR_EN 13
-#define PIN_FLIP_DRV 12
+#define PIN_PWR_EN 12
 #define PIN_DIAG_EN 22
+#define PIN_FLIP_DRV 33
 #define PIN_CNV A5
 
 #define STARTUP_DELAY 50 //ms
