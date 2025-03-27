@@ -57,7 +57,7 @@ typedef struct {
  *
  * Therefore   K = 5 / (Sdevice * 2^n)
  *               = 5 / (0.000183 * 2^18)
- *               = 1.042267 * 10^-4
+ *               = 0.104227
  */
 #define ADAF1080_SCALE_FACTOR 0.104227F
 #define AD4002_MIDCODE 131072
@@ -66,27 +66,73 @@ typedef struct {
 #define SPI_BIT_ORDER MSBFIRST
 #define SPI_MODE SPI_MODE0
 
+#define PIN_PWR_EN 13
+#define PIN_FLIP_DRV 12
+#define PIN_DIAG_EN 22
 #define PIN_CNV A5
-#define PIN_DUMMY_MOSI 33
 
-#define SAMPLE_TIME 1000
+#define STARTUP_DELAY 50 //ms
+#define FLIP_DELAY 1 //ms
+#define SAMPLE_TIME 1000 //ms
 
 #define BLE_INST_ID 0
-#define NUM_CHARACTERISTICS 1
+#define NUM_CHARACTERISTICS 3
 
 #define BLE_SERVICE_UUID BLEUUID("7749eb1b-2b16-4d32-8422-e792dae7adb8")
 #define MAGFIELD_UUID BLEUUID("1de21519-a563-428b-9e18-b033f8bd7348")
+#define OFFSET_UUID BLEUUID("fc13446a-8329-4a00-8b74-6119d1129485")
+#define CALIBRATE_UUID BLEUUID("9c60f79f-18e0-4343-967e-b6474b305c8b")
 
 #define MAGFIELD_FORMAT BLE2904::FORMAT_SINT16
-#define MAGFIELD_EXPONENT -2
+#define OFFSET_FORMAT BLE2904::FORMAT_SINT16
+#define CALIBRATE_FORMAT BLE2904::FORMAT_UINT8
+
+#define MAGFIELD_EXPONENT -2 //10nT precision
+#define OFFSET_EXPONENT -2
+#define CALIBRATE_EXPONENT 0
+
 #define MAGFIELD_UNIT BLEUnit::uTesla
+#define OFFSET_UNIT BLEUnit::uTesla
+#define CALIBRATE_UNIT BLEUnit::Unitless
+
 #define MAGFIELD_NAME "Magnetic field strength"
+#define OFFSET_NAME "Sensor offset correction"
+#define CALIBRATE_NAME "Calibrate sensor"
+
+static void calibrateSensor(void);
+
+class CalibrateCallbacks : public BLECharacteristicCallbacks {
+  void onWrite(BLECharacteristic *pCharacteristic) {
+    if (pCharacteristic == NULL) {
+      return;
+    }
+
+    size_t dataLen = pCharacteristic->getLength();
+    if (dataLen < 1) {
+      return;
+    }
+
+    uint8_t *pData = pCharacteristic->getData();
+    if (pData[0]) { //Client writes '1' to start calibration
+      calibrateSensor();
+      uint8_t newVal = 0;
+      pCharacteristic->setValue(&newVal, 1); //Set value back to '0' when calibration is complete
+      pCharacteristic->notify();
+    }
+  }
+};
 
 static BLECharacteristic m_magFieldCharacteristic(MAGFIELD_UUID, BLECharacteristic::PROPERTY_READ | BLECharacteristic::PROPERTY_NOTIFY);
+static BLECharacteristic m_offsetCharacteristic(OFFSET_UUID, BLECharacteristic::PROPERTY_READ | BLECharacteristic::PROPERTY_NOTIFY);
+static BLECharacteristic m_calibrateCharacteristic(CALIBRATE_UUID, BLECharacteristic::PROPERTY_READ | BLECharacteristic::PROPERTY_WRITE | BLECharacteristic::PROPERTY_NOTIFY);
 static BLEWrapper m_magFieldWrapper(&m_magFieldCharacteristic, MAGFIELD_NAME, MAGFIELD_FORMAT, MAGFIELD_EXPONENT, MAGFIELD_UNIT);
+static BLEWrapper m_offsetWrapper(&m_offsetCharacteristic, OFFSET_NAME, OFFSET_FORMAT, OFFSET_EXPONENT, OFFSET_UNIT);
+static BLEWrapper m_calibrateWrapper(&m_calibrateCharacteristic, CALIBRATE_NAME, CALIBRATE_FORMAT, CALIBRATE_EXPONENT, CALIBRATE_UNIT);
 
 static unsigned long m_lastTime;
 static bool m_ready = false;
+static int32_t m_offsetCorrection = 0; //Offset correction factor measured in ADC counts
+static float m_reportedOffset = 0.0f; //Actual sensor offset in uTesla (only used for reporting)
 
 static void ad4002_writeConfig(ad4002_cfg_t cfg) {
   /*
@@ -139,40 +185,51 @@ static uint32_t ad4002_readResult(void) {
   SPI.transfer(buffer, 3);
   SPI.endTransaction();
 
-  int i;
-  Serial.print("Read 3 bytes:");
-  for (i = 0; i < 3; i++) {
-    Serial.print(" 0x");
-    Serial.print(buffer[i], HEX);
-  }
-  Serial.println();
-
   uint32_t result = buffer[0] << 10;
   result |= buffer[1] << 2;
   result |= buffer[2] >> 6; //Only use 2 MSBs of last byte, discarding 6 LSBs
   return result;
 }
 
-static float adaf1080_read(void) {
+static float readSensor(void) {
   uint32_t adcCounts = ad4002_readResult(); //18 bit unipolar ADC result
-
-  float vref = 4.5f;
-  int numBits = 18;
-  float adcMax = pow(2.0f, (float)numBits);
-  float volts = adcCounts * vref / adcMax;
-  Serial.print("Raw ADC val = ");
-  Serial.println(adcCounts);
-  Serial.print("Voltage = ");
-  Serial.println(volts);
-
   int32_t bipolar = (int32_t)adcCounts - AD4002_MIDCODE; //18 bit bipolar ADC result i.e symmetrical about 0
-  return (float)bipolar * ADAF1080_SCALE_FACTOR;
+  return (float)(bipolar - m_offsetCorrection) * ADAF1080_SCALE_FACTOR;
+}
+
+static void calibrateSensor(void) {
+  /*
+   * See ADAF1080 datasheet page 27 for details of offset correction
+   */
+  Serial.print("ADAF1080: beginning sensor calibration... ");
+
+  digitalWrite(PIN_FLIP_DRV, HIGH); //Flip sensor in both directions so that we guarantee at least one flip regardless which direction we started in
+  delay(FLIP_DELAY);
+  digitalWrite(PIN_FLIP_DRV, LOW);
+  delay(FLIP_DELAY);
+  uint32_t negReading = ad4002_readResult(); //Sensor is now in negative polarity
+
+  digitalWrite(PIN_FLIP_DRV, HIGH); //Flip sensor back to positive polarity
+  delay(FLIP_DELAY);
+  uint32_t posReading = ad4002_readResult();
+  m_offsetCorrection = (int32_t)posReading - (int32_t)negReading; //AD4002 output is only 18-bit so we don't have to worry about overflowing 32-bit integer
+  m_reportedOffset = (float)m_offsetCorrection * ADAF1080_SCALE_FACTOR; //We now know the sensor offset in raw ADC counts. Convert that back to uTesla for reporting
+
+  Serial.println("Complete!");
 }
 
 bool adaf1080_init(void) {
-  digitalWrite(PIN_CNV, LOW);
+  pinMode(PIN_FLIP_DRV, OUTPUT);
+  digitalWrite(PIN_FLIP_DRV, LOW); //Start with FLIP_DRV low ready to generate positive edge
+  pinMode(PIN_DIAG_EN, OUTPUT);
+  digitalWrite(PIN_DIAG_EN, LOW); //Turn diag coil off
   pinMode(PIN_CNV, OUTPUT);
+  digitalWrite(PIN_CNV, LOW); //CNV should idle low between transactions
+  pinMode(PIN_PWR_EN, OUTPUT);
+  digitalWrite(PIN_PWR_EN, HIGH); //Power on 5V boost converter
 
+  delay(STARTUP_DELAY); //Allow boost converter to start
+  digitalWrite(PIN_FLIP_DRV, HIGH); //Flip sensor back to positive direction
   SPI.begin();
 
   ad4002_cfg_t cfg = {
@@ -220,7 +277,14 @@ bool adaf1080_addService(BLEServer *pServer) {
   }
 
   pService->addCharacteristic(&m_magFieldCharacteristic);
+  pService->addCharacteristic(&m_offsetCharacteristic);
+  pService->addCharacteristic(&m_calibrateCharacteristic);
+  m_calibrateCharacteristic.setCallbacks(new CalibrateCallbacks());
   pService->start();
+
+  uint8_t temp = 0;
+  m_calibrateCharacteristic.setValue(&temp, 1);
+  m_calibrateCharacteristic.notify();
   return true;
 }
 
@@ -228,7 +292,8 @@ void adaf1080_loop(void) {
   unsigned long now = millis();
   if (m_ready && (now - m_lastTime >= SAMPLE_TIME)) {
     m_lastTime = now;
-    float magField = adaf1080_read();
+    float magField = readSensor();
     m_magFieldWrapper.writeValue(magField);
+    m_offsetWrapper.writeValue(m_reportedOffset);
   }
 }
