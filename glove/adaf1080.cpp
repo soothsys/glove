@@ -67,7 +67,7 @@ typedef struct {
 #define SPI_MODE SPI_MODE0
 
 #define PIN_PWR_EN 12
-#define PIN_DIAG_EN 22
+#define PIN_DIAG_EN 27
 #define PIN_FLIP_DRV 33
 #define PIN_CNV A5
 
@@ -76,30 +76,42 @@ typedef struct {
 #define SAMPLE_TIME 1000 //ms
 
 #define BLE_INST_ID 0
-#define NUM_CHARACTERISTICS 3
+#define NUM_CHARACTERISTICS 5
 
 #define BLE_SERVICE_UUID BLEUUID("7749eb1b-2b16-4d32-8422-e792dae7adb8")
 #define MAGFIELD_UUID BLEUUID("1de21519-a563-428b-9e18-b033f8bd7348")
 #define OFFSET_UUID BLEUUID("fc13446a-8329-4a00-8b74-6119d1129485")
 #define CALIBRATE_UUID BLEUUID("9c60f79f-18e0-4343-967e-b6474b305c8b")
+#define DIAG_SET_UUID BLEUUID("64e70c2e-4f61-4c1e-bd8e-e6c48e936d4b")
+#define DIAG_GET_UUID BLEUUID("0b541f35-34c1-4769-b206-8deaaa7e0922")
 
 #define MAGFIELD_FORMAT BLE2904::FORMAT_SINT32
 #define OFFSET_FORMAT BLE2904::FORMAT_SINT32
-#define CALIBRATE_FORMAT BLE2904::FORMAT_UINT8
+#define CALIBRATE_FORMAT BLE2904::FORMAT_BOOLEAN
+#define DIAG_SET_FORMAT BLE2904::FORMAT_BOOLEAN
+#define DIAG_GET_FORMAT BLE2904::FORMAT_BOOLEAN
 
 #define MAGFIELD_EXPONENT -2 //10nT precision
 #define OFFSET_EXPONENT -2
 #define CALIBRATE_EXPONENT 0
+#define DIAG_SET_EXPONENT 0
+#define DIAG_GET_EXPONENT 0
 
 #define MAGFIELD_UNIT BLEUnit::uTesla
 #define OFFSET_UNIT BLEUnit::uTesla
 #define CALIBRATE_UNIT BLEUnit::Unitless
+#define DIAG_SET_UNIT BLEUnit::Unitless
+#define DIAG_GET_UNIT BLEUnit::Unitless
 
 #define MAGFIELD_NAME "Magnetic field strength"
 #define OFFSET_NAME "Sensor offset correction"
 #define CALIBRATE_NAME "Calibrate sensor"
+#define DIAG_SET_NAME "Diag coil on/off"
+#define DIAG_GET_NAME "Diag coil status"
 
 static void calibrateSensor(void);
+static void diagCoilOn(void);
+static void diagCoilOff(void);
 
 class CalibrateCallbacks : public BLECharacteristicCallbacks {
   void onWrite(BLECharacteristic *pCharacteristic) {
@@ -122,15 +134,41 @@ class CalibrateCallbacks : public BLECharacteristicCallbacks {
   }
 };
 
+class DiagCallbacks : public BLECharacteristicCallbacks {
+  void onWrite(BLECharacteristic *pCharacteristic) {
+    if (pCharacteristic == NULL) {
+      return;
+    }
+
+    size_t dataLen = pCharacteristic->getLength();
+    if (dataLen < 1) {
+      return;
+    }
+
+    uint8_t *pData = pCharacteristic->getData();
+    if (pData[0]) {
+      diagCoilOn();
+    } else {
+      diagCoilOff();
+    }
+  }
+};
+
 static BLECharacteristic m_magFieldCharacteristic(MAGFIELD_UUID, BLECharacteristic::PROPERTY_READ | BLECharacteristic::PROPERTY_NOTIFY);
 static BLECharacteristic m_offsetCharacteristic(OFFSET_UUID, BLECharacteristic::PROPERTY_READ | BLECharacteristic::PROPERTY_NOTIFY);
 static BLECharacteristic m_calibrateCharacteristic(CALIBRATE_UUID, BLECharacteristic::PROPERTY_READ | BLECharacteristic::PROPERTY_WRITE | BLECharacteristic::PROPERTY_NOTIFY);
+static BLECharacteristic m_diagSetCharacteristic(DIAG_SET_UUID, BLECharacteristic::PROPERTY_READ | BLECharacteristic::PROPERTY_WRITE | BLECharacteristic::PROPERTY_NOTIFY);
+static BLECharacteristic m_diagGetCharacteristic(DIAG_GET_UUID, BLECharacteristic::PROPERTY_READ | BLECharacteristic::PROPERTY_NOTIFY);
+
 static BLEWrapper m_magFieldWrapper(&m_magFieldCharacteristic, MAGFIELD_NAME, MAGFIELD_FORMAT, MAGFIELD_EXPONENT, MAGFIELD_UNIT);
 static BLEWrapper m_offsetWrapper(&m_offsetCharacteristic, OFFSET_NAME, OFFSET_FORMAT, OFFSET_EXPONENT, OFFSET_UNIT);
 static BLEWrapper m_calibrateWrapper(&m_calibrateCharacteristic, CALIBRATE_NAME, CALIBRATE_FORMAT, CALIBRATE_EXPONENT, CALIBRATE_UNIT);
+static BLEWrapper m_diagSetWrapper(&m_diagSetCharacteristic, DIAG_SET_NAME, DIAG_SET_FORMAT, DIAG_SET_EXPONENT, DIAG_SET_UNIT);
+static BLEWrapper m_diagGetWrapper(&m_diagGetCharacteristic, DIAG_GET_NAME, DIAG_GET_FORMAT, DIAG_GET_EXPONENT, DIAG_GET_UNIT);
 
 static unsigned long m_lastTime;
 static bool m_ready = false;
+static bool m_diagCoilOn = false;
 static int32_t m_offsetCorrection = 0; //Offset correction factor measured in ADC counts
 static float m_reportedOffset = 0.0f; //Actual sensor offset in uTesla (only used for reporting)
 
@@ -218,6 +256,18 @@ static void calibrateSensor(void) {
   Serial.println("Complete!");
 }
 
+static void diagCoilOn(void) {
+  Serial.println("Enabling diag coil");
+  digitalWrite(PIN_DIAG_EN, HIGH);
+  m_diagCoilOn = true;
+}
+
+static void diagCoilOff(void) {
+  Serial.println("Disabling diag coil");
+  digitalWrite(PIN_DIAG_EN, LOW);
+  m_diagCoilOn = false;
+}
+
 bool adaf1080_init(void) {
   pinMode(PIN_FLIP_DRV, OUTPUT);
   digitalWrite(PIN_FLIP_DRV, LOW); //Start with FLIP_DRV low ready to generate positive edge
@@ -279,12 +329,17 @@ bool adaf1080_addService(BLEServer *pServer) {
   pService->addCharacteristic(&m_magFieldCharacteristic);
   pService->addCharacteristic(&m_offsetCharacteristic);
   pService->addCharacteristic(&m_calibrateCharacteristic);
+  pService->addCharacteristic(&m_diagSetCharacteristic);
+  pService->addCharacteristic(&m_diagGetCharacteristic);
   m_calibrateCharacteristic.setCallbacks(new CalibrateCallbacks());
+  m_diagSetCharacteristic.setCallbacks(new DiagCallbacks());
   pService->start();
 
   uint8_t temp = 0;
   m_calibrateCharacteristic.setValue(&temp, 1);
   m_calibrateCharacteristic.notify();
+  m_diagSetCharacteristic.setValue(&temp, 1);
+  m_diagSetCharacteristic.notify();
   return true;
 }
 
@@ -295,5 +350,6 @@ void adaf1080_loop(void) {
     float magField = readSensor();
     m_magFieldWrapper.writeValue(magField);
     m_offsetWrapper.writeValue(m_reportedOffset);
+    m_diagGetWrapper.writeValue(m_diagCoilOn);
   }
 }
