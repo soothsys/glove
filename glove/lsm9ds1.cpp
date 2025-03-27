@@ -39,7 +39,7 @@
 #define ANGLE_EXPONENT -2
 
 #define ACCEL_UNIT BLEUnit::MetresPerSecondSquared
-#define MAG_UNIT BLEUnit::uTelsa
+#define MAG_UNIT BLEUnit::uTesla
 #define GYRO_UNIT BLEUnit::RadsPerSecond
 #define ANGLE_UNIT BLEUnit::Radian
 

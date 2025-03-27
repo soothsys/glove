@@ -17,7 +17,7 @@ enum class BLEUnit {
   Radian                 = 0x2720,
 	Pascal		             = 0x2724,
   Volt                   = 0x2728,
-  uTelsa                 = 0x272D,
+  uTesla                 = 0x272D,
 	DegC	  	             = 0x272F,
   RadsPerSecond          = 0x2743,
 	Percent		             = 0x27AD,

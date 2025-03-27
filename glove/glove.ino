@@ -23,6 +23,7 @@
 #include "bme688.h"
 #include "as7341.h"
 #include "lsm9ds1.h"
+#include "adaf1080.h"
 
 #define PRINT_INTERVAL 1000000 //1 second in us
 #define BAUD_RATE			 115200
@@ -90,6 +91,9 @@ void setup(void) {
   if (lsm9ds1_init()) {
     nSensors++;
   }
+  if (adaf1080_init()) {
+    nSensors++;
+  }
 
 	if (nSensors == 0) {
 		ERROR_HALT("Failed to initialise any sensors");
@@ -114,6 +118,9 @@ void setup(void) {
   if (!lsm9ds1_addService(pServer)) {
     ERROR("Failed to add LSM9DS1 service");
   }
+  if (!adaf1080_addService(pServer)) {
+    ERROR("Failed to add ADAF1080 service");
+  }
 	
 	pAdvert = pServer->getAdvertising();
 	if (pAdvert == NULL) {
@@ -135,6 +142,7 @@ void loop(void) {
 		bme688_loop();
     as7341_loop();
     lsm9ds1_loop();
+    adaf1080_loop();
 	}
 
   unsigned long now = micros();

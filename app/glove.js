@@ -35,7 +35,8 @@ const supportedServices = new Map([
 	[BluetoothUUID.canonicalUUID(0x180F), 'Battery'],
 	[BluetoothUUID.canonicalUUID(0x181A), 'Environmental Sensor'],
 	[BluetoothUUID.canonicalUUID(0x054D), 'Light Sensor'],
-	['606a0692-1e69-422a-9f73-de87d239aade', 'Inertial Measurement Unit']
+	['606a0692-1e69-422a-9f73-de87d239aade', 'Inertial Measurement Unit'],
+	['7749eb1b-2b16-4d32-8422-e792dae7adb8', 'Magnetic Field Sensor']
 ]);
 
 const presInfoCache = new Map();
