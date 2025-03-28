@@ -138,10 +138,18 @@ void loop(void) {
   powermgmt_loop();
   
 	if (m_deviceConnected) {
+    adaf1080_loop(); //Call adaf1080_loop() between each other sensor as ADAF1080 has faster readout requirement
     battery_loop();
+    
+    adaf1080_loop();
 		bme688_loop();
+
+    adaf1080_loop();
     as7341_loop();
+
+    adaf1080_loop();
     lsm9ds1_loop();
+
     adaf1080_loop();
 	}
 

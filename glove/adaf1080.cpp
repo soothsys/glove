@@ -14,6 +14,7 @@
 
 #define ERR_MODULE_NAME "ADAF1080"
 
+#include <float.h>
 #include <SPI.h>
 #include <BLEServer.h>
 #include <BLEUtils.h>
@@ -73,41 +74,83 @@ typedef struct {
 
 #define STARTUP_DELAY 50 //ms
 #define FLIP_DELAY 1 //ms
-#define SAMPLE_TIME 1000 //ms
+#define SAMPLE_TIME 4000 //4000us = 250Hz
+#define NUM_SAMPLES 250 //Calculate statistics every second
 
 #define BLE_INST_ID 0
-#define NUM_CHARACTERISTICS 5
+#define NUM_CHARACTERISTICS 10
 
 #define BLE_SERVICE_UUID BLEUUID("7749eb1b-2b16-4d32-8422-e792dae7adb8")
-#define MAGFIELD_UUID BLEUUID("1de21519-a563-428b-9e18-b033f8bd7348")
-#define OFFSET_UUID BLEUUID("fc13446a-8329-4a00-8b74-6119d1129485")
-#define CALIBRATE_UUID BLEUUID("9c60f79f-18e0-4343-967e-b6474b305c8b")
-#define DIAG_SET_UUID BLEUUID("64e70c2e-4f61-4c1e-bd8e-e6c48e936d4b")
-#define DIAG_GET_UUID BLEUUID("0b541f35-34c1-4769-b206-8deaaa7e0922")
+#define CALIBRATE_UUID BLEUUID("0b541f35-34c1-4769-b206-8deaaa7e0922")
+#define DIAG_SET_UUID BLEUUID("15e53a14-9e4c-489b-ab8c-98569758764d")
+#define DIAG_GET_UUID BLEUUID("1de21519-a563-428b-9e18-b033f8bd7348")
+#define OFFSET_UUID BLEUUID("3c510d3d-3d82-4fd9-9dd3-da928916662b")
+#define AVG_UUID BLEUUID("3c70df7e-3b42-4e52-bbdb-ff47728bec8a")
+#define RMS_UUID BLEUUID("5fd8a802-0645-492f-bb0e-541972833add")
+#define PK_UUID BLEUUID("949b3518-826e-4a4b-b638-fea08b01e1a0")
+#define PP_UUID BLEUUID("9c60f79f-18e0-4343-967e-b6474b305c8b")
+#define MIN_UUID BLEUUID("eea8f3a7-d5b1-4454-8e5b-44ce3c0fb372")
+#define MAX_UUID BLEUUID("fc13446a-8329-4a00-8b74-6119d1129485")
 
-#define MAGFIELD_FORMAT BLE2904::FORMAT_SINT32
-#define OFFSET_FORMAT BLE2904::FORMAT_SINT32
 #define CALIBRATE_FORMAT BLE2904::FORMAT_BOOLEAN
 #define DIAG_SET_FORMAT BLE2904::FORMAT_BOOLEAN
 #define DIAG_GET_FORMAT BLE2904::FORMAT_BOOLEAN
+#define MAGFIELD_FORMAT BLE2904::FORMAT_SINT32
 
-#define MAGFIELD_EXPONENT -2 //10nT precision
-#define OFFSET_EXPONENT -2
 #define CALIBRATE_EXPONENT 0
 #define DIAG_SET_EXPONENT 0
 #define DIAG_GET_EXPONENT 0
+#define MAGFIELD_EXPONENT -2 //10nT precision
 
-#define MAGFIELD_UNIT BLEUnit::uTesla
-#define OFFSET_UNIT BLEUnit::uTesla
 #define CALIBRATE_UNIT BLEUnit::Unitless
 #define DIAG_SET_UNIT BLEUnit::Unitless
 #define DIAG_GET_UNIT BLEUnit::Unitless
+#define MAGFIELD_UNIT BLEUnit::uTesla
 
-#define MAGFIELD_NAME "Magnetic field strength"
-#define OFFSET_NAME "Sensor offset correction"
 #define CALIBRATE_NAME "Calibrate sensor"
 #define DIAG_SET_NAME "Diag coil on/off"
 #define DIAG_GET_NAME "Diag coil status"
+#define OFFSET_NAME "Sensor offset correction"
+#define AVG_NAME "Average (DC)"
+#define RMS_NAME "Root mean square (AC RMS)"
+#define PK_NAME "Peak"
+#define PP_NAME "Peak-to-peak"
+#define MIN_NAME "Minimum"
+#define MAX_NAME "Maximum"
+
+static BLECharacteristic m_calibrateCharacteristic(CALIBRATE_UUID, BLECharacteristic::PROPERTY_READ | BLECharacteristic::PROPERTY_WRITE | BLECharacteristic::PROPERTY_NOTIFY);
+static BLECharacteristic m_diagSetCharacteristic(DIAG_SET_UUID, BLECharacteristic::PROPERTY_READ | BLECharacteristic::PROPERTY_WRITE | BLECharacteristic::PROPERTY_NOTIFY);
+static BLECharacteristic m_diagGetCharacteristic(DIAG_GET_UUID, BLECharacteristic::PROPERTY_READ | BLECharacteristic::PROPERTY_NOTIFY);
+static BLECharacteristic m_offsetCharacteristic(OFFSET_UUID, BLECharacteristic::PROPERTY_READ | BLECharacteristic::PROPERTY_NOTIFY);
+static BLECharacteristic m_avgCharacteristic(AVG_UUID, BLECharacteristic::PROPERTY_READ | BLECharacteristic::PROPERTY_NOTIFY);
+static BLECharacteristic m_rmsCharacteristic(RMS_UUID, BLECharacteristic::PROPERTY_READ | BLECharacteristic::PROPERTY_NOTIFY);
+static BLECharacteristic m_pkCharacteristic(PK_UUID, BLECharacteristic::PROPERTY_READ | BLECharacteristic::PROPERTY_NOTIFY);
+static BLECharacteristic m_ppCharacteristic(PP_UUID, BLECharacteristic::PROPERTY_READ | BLECharacteristic::PROPERTY_NOTIFY);
+static BLECharacteristic m_minCharacteristic(MIN_UUID, BLECharacteristic::PROPERTY_READ | BLECharacteristic::PROPERTY_NOTIFY);
+static BLECharacteristic m_maxCharacteristic(MAX_UUID, BLECharacteristic::PROPERTY_READ | BLECharacteristic::PROPERTY_NOTIFY);
+
+static BLEWrapper m_calibrateWrapper(&m_calibrateCharacteristic, CALIBRATE_NAME, CALIBRATE_FORMAT, CALIBRATE_EXPONENT, CALIBRATE_UNIT);
+static BLEWrapper m_diagSetWrapper(&m_diagSetCharacteristic, DIAG_SET_NAME, DIAG_SET_FORMAT, DIAG_SET_EXPONENT, DIAG_SET_UNIT);
+static BLEWrapper m_diagGetWrapper(&m_diagGetCharacteristic, DIAG_GET_NAME, DIAG_GET_FORMAT, DIAG_GET_EXPONENT, DIAG_GET_UNIT);
+static BLEWrapper m_offsetWrapper(&m_offsetCharacteristic, OFFSET_NAME, MAGFIELD_FORMAT, MAGFIELD_EXPONENT, MAGFIELD_UNIT);
+static BLEWrapper m_avgWrapper(&m_avgCharacteristic, AVG_NAME, MAGFIELD_FORMAT, MAGFIELD_EXPONENT, MAGFIELD_UNIT);
+static BLEWrapper m_rmsWrapper(&m_rmsCharacteristic, RMS_NAME, MAGFIELD_FORMAT, MAGFIELD_EXPONENT, MAGFIELD_UNIT);
+static BLEWrapper m_pkWrapper(&m_pkCharacteristic, PK_NAME, MAGFIELD_FORMAT, MAGFIELD_EXPONENT, MAGFIELD_UNIT);
+static BLEWrapper m_ppWrapper(&m_ppCharacteristic, PP_NAME, MAGFIELD_FORMAT, MAGFIELD_EXPONENT, MAGFIELD_UNIT);
+static BLEWrapper m_minWrapper(&m_minCharacteristic, MIN_NAME, MAGFIELD_FORMAT, MAGFIELD_EXPONENT, MAGFIELD_UNIT);
+static BLEWrapper m_maxWrapper(&m_maxCharacteristic, MAX_NAME, MAGFIELD_FORMAT, MAGFIELD_EXPONENT, MAGFIELD_UNIT);
+
+static unsigned long m_lastTime;
+static bool m_ready = false;
+static bool m_diagCoilOn = false;
+static int32_t m_offsetCorrection = 0; //Offset correction factor measured in ADC counts
+static float m_reportedOffset = 0.0f; //Actual sensor offset in uTesla (only used for reporting)
+
+static int m_sampleCount;
+static float m_minValue;
+static float m_maxValue;
+static float m_avgAccum;
+static float m_rmsAccum;
 
 static void calibrateSensor(void);
 static void diagCoilOn(void);
@@ -153,24 +196,6 @@ class DiagCallbacks : public BLECharacteristicCallbacks {
     }
   }
 };
-
-static BLECharacteristic m_magFieldCharacteristic(MAGFIELD_UUID, BLECharacteristic::PROPERTY_READ | BLECharacteristic::PROPERTY_NOTIFY);
-static BLECharacteristic m_offsetCharacteristic(OFFSET_UUID, BLECharacteristic::PROPERTY_READ | BLECharacteristic::PROPERTY_NOTIFY);
-static BLECharacteristic m_calibrateCharacteristic(CALIBRATE_UUID, BLECharacteristic::PROPERTY_READ | BLECharacteristic::PROPERTY_WRITE | BLECharacteristic::PROPERTY_NOTIFY);
-static BLECharacteristic m_diagSetCharacteristic(DIAG_SET_UUID, BLECharacteristic::PROPERTY_READ | BLECharacteristic::PROPERTY_WRITE | BLECharacteristic::PROPERTY_NOTIFY);
-static BLECharacteristic m_diagGetCharacteristic(DIAG_GET_UUID, BLECharacteristic::PROPERTY_READ | BLECharacteristic::PROPERTY_NOTIFY);
-
-static BLEWrapper m_magFieldWrapper(&m_magFieldCharacteristic, MAGFIELD_NAME, MAGFIELD_FORMAT, MAGFIELD_EXPONENT, MAGFIELD_UNIT);
-static BLEWrapper m_offsetWrapper(&m_offsetCharacteristic, OFFSET_NAME, OFFSET_FORMAT, OFFSET_EXPONENT, OFFSET_UNIT);
-static BLEWrapper m_calibrateWrapper(&m_calibrateCharacteristic, CALIBRATE_NAME, CALIBRATE_FORMAT, CALIBRATE_EXPONENT, CALIBRATE_UNIT);
-static BLEWrapper m_diagSetWrapper(&m_diagSetCharacteristic, DIAG_SET_NAME, DIAG_SET_FORMAT, DIAG_SET_EXPONENT, DIAG_SET_UNIT);
-static BLEWrapper m_diagGetWrapper(&m_diagGetCharacteristic, DIAG_GET_NAME, DIAG_GET_FORMAT, DIAG_GET_EXPONENT, DIAG_GET_UNIT);
-
-static unsigned long m_lastTime;
-static bool m_ready = false;
-static bool m_diagCoilOn = false;
-static int32_t m_offsetCorrection = 0; //Offset correction factor measured in ADC counts
-static float m_reportedOffset = 0.0f; //Actual sensor offset in uTesla (only used for reporting)
 
 static void ad4002_writeConfig(ad4002_cfg_t cfg) {
   /*
@@ -229,6 +254,13 @@ static uint32_t ad4002_readResult(void) {
   return result;
 }
 
+static void resetStatistics(void) {
+  m_sampleCount = 0;
+  m_minValue = FLT_MAX;
+  m_maxValue = -FLT_MAX;
+  m_avgAccum = m_rmsAccum = 0.0f;
+}
+
 static float readSensor(void) {
   uint32_t adcCounts = ad4002_readResult(); //18 bit unipolar ADC result
   int32_t bipolar = (int32_t)adcCounts - AD4002_MIDCODE; //18 bit bipolar ADC result i.e symmetrical about 0
@@ -253,6 +285,7 @@ static void calibrateSensor(void) {
   m_offsetCorrection = (int32_t)posReading - (int32_t)negReading; //AD4002 output is only 18-bit so we don't have to worry about overflowing 32-bit integer
   m_reportedOffset = (float)m_offsetCorrection * ADAF1080_SCALE_FACTOR; //We now know the sensor offset in raw ADC counts. Convert that back to uTesla for reporting
 
+  resetStatistics(); //Previously gathered statistics are now invalid due to change of offset, start from scratch
   Serial.println("Complete!");
 }
 
@@ -308,6 +341,7 @@ bool adaf1080_init(void) {
   pinMode(MOSI, OUTPUT);
   digitalWrite(MOSI, HIGH);
 
+  resetStatistics(); //Initialise counters for statistical measurement
   m_lastTime = millis();
   m_ready = true;
   return true;
@@ -326,11 +360,16 @@ bool adaf1080_addService(BLEServer *pServer) {
     return false;
   }
 
-  pService->addCharacteristic(&m_magFieldCharacteristic);
-  pService->addCharacteristic(&m_offsetCharacteristic);
   pService->addCharacteristic(&m_calibrateCharacteristic);
   pService->addCharacteristic(&m_diagSetCharacteristic);
   pService->addCharacteristic(&m_diagGetCharacteristic);
+  pService->addCharacteristic(&m_offsetCharacteristic);
+  pService->addCharacteristic(&m_avgCharacteristic);
+  pService->addCharacteristic(&m_rmsCharacteristic);
+  pService->addCharacteristic(&m_pkCharacteristic);
+  pService->addCharacteristic(&m_ppCharacteristic);
+  pService->addCharacteristic(&m_minCharacteristic);
+  pService->addCharacteristic(&m_maxCharacteristic);
   m_calibrateCharacteristic.setCallbacks(new CalibrateCallbacks());
   m_diagSetCharacteristic.setCallbacks(new DiagCallbacks());
   pService->start();
@@ -344,12 +383,45 @@ bool adaf1080_addService(BLEServer *pServer) {
 }
 
 void adaf1080_loop(void) {
-  unsigned long now = millis();
+  unsigned long now = micros();
   if (m_ready && (now - m_lastTime >= SAMPLE_TIME)) {
     m_lastTime = now;
+
     float magField = readSensor();
-    m_magFieldWrapper.writeValue(magField);
-    m_offsetWrapper.writeValue(m_reportedOffset);
-    m_diagGetWrapper.writeValue(m_diagCoilOn);
+    m_avgAccum += magField;
+    m_rmsAccum += magField * magField; //RMS is the square-root of the average of the squares
+
+    if (magField < m_minValue) {
+      m_minValue = magField;
+    }
+
+    if (magField > m_maxValue) {
+      m_maxValue = magField;
+    }
+
+    m_sampleCount++;
+    if (m_sampleCount >= NUM_SAMPLES) {
+      float avg = m_avgAccum / (float)m_sampleCount;
+      float rms = sqrt(m_rmsAccum / (float)m_sampleCount - avg * avg); //Remove DC offset when calculating RMS - more useful for cable detection
+      float pp = m_maxValue - m_minValue; //Peak-to-peak is the difference between largest and smallest values
+
+      float pk; //Peak is the difference between the largest peak (+ve or -ve) and the average
+      if (m_maxValue > -m_minValue) {
+        pk = m_maxValue - avg;
+      } else {
+        pk = -(m_minValue - avg);
+      }
+
+      m_diagGetWrapper.writeValue(m_diagCoilOn);
+      m_offsetWrapper.writeValue(m_reportedOffset);
+      m_avgWrapper.writeValue(avg);
+      m_rmsWrapper.writeValue(rms);
+      m_pkWrapper.writeValue(pk);
+      m_ppWrapper.writeValue(pp);
+      m_minWrapper.writeValue(m_minValue);
+      m_maxWrapper.writeValue(m_maxValue);
+
+      resetStatistics();
+    }
   }
 }
