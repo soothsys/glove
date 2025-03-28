@@ -76,6 +76,7 @@ typedef struct {
 #define FLIP_DELAY 1 //ms
 #define SAMPLE_TIME 4000 //4000us = 250Hz
 #define NUM_SAMPLES 250 //Calculate statistics every second
+#define CAL_AVERAGE_SAMPLES 32 //Average over multiple samples during calibration process to reduce noise
 
 #define BLE_INST_ID 0
 #define NUM_CHARACTERISTICS 10
@@ -254,6 +255,17 @@ static uint32_t ad4002_readResult(void) {
   return result;
 }
 
+static float ad4002_readAverage(int nSamples) {
+  float accum = 0.0f;
+  int i;
+  for (i = 0; i < nSamples; i++) {
+    accum += (float)ad4002_readResult();
+    delay(1); //Prevent timing violation
+  }
+
+  return accum / (float)nSamples;
+}
+
 static void resetStatistics(void) {
   m_sampleCount = 0;
   m_minValue = FLT_MAX;
@@ -277,16 +289,21 @@ static void calibrateSensor(void) {
   delay(FLIP_DELAY);
   digitalWrite(PIN_FLIP_DRV, LOW);
   delay(FLIP_DELAY);
-  uint32_t negReading = ad4002_readResult(); //Sensor is now in negative polarity
+  float negReading = ad4002_readAverage(CAL_AVERAGE_SAMPLES); //Sensor is now in negative polarity
 
   digitalWrite(PIN_FLIP_DRV, HIGH); //Flip sensor back to positive polarity
   delay(FLIP_DELAY);
-  uint32_t posReading = ad4002_readResult();
-  m_offsetCorrection = (int32_t)posReading - (int32_t)negReading; //AD4002 output is only 18-bit so we don't have to worry about overflowing 32-bit integer
-  m_reportedOffset = (float)m_offsetCorrection * ADAF1080_SCALE_FACTOR; //We now know the sensor offset in raw ADC counts. Convert that back to uTesla for reporting
+  float posReading = ad4002_readAverage(CAL_AVERAGE_SAMPLES);
+  
+  float fOffsetCorrection = posReading - negReading;
+  m_offsetCorrection = (int32_t)round(fOffsetCorrection); //AD4002 output is only 18-bit so we don't have to worry about overflowing 32-bit integer
+  m_reportedOffset = fOffsetCorrection * ADAF1080_SCALE_FACTOR; //We now know the sensor offset in raw ADC counts. Convert that back to uTesla for reporting
 
   resetStatistics(); //Previously gathered statistics are now invalid due to change of offset, start from scratch
   Serial.println("Complete!");
+  Serial.print("ADAF1080: Offset correction factor is now ");
+  Serial.print(m_offsetCorrection);
+  Serial.println(" LSBs");
 }
 
 static void diagCoilOn(void) {
