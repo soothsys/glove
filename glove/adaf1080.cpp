@@ -151,8 +151,8 @@ static int32_t m_offsetCorrection = 0; //Offset correction factor measured in AD
 static int m_sampleCount;
 static float m_minValue;
 static float m_maxValue;
-static float m_avgAccum;
-static float m_rmsAccum;
+static double m_avgAccum; //Use double precision for accumulators to prevent "catastrophic cancellation" error when calculating ACRMS = sqrt(RMS^2 - Average^2)
+static double m_rmsAccum;
 
 class CalibrateCallbacks : public BLECharacteristicCallbacks {
   void onWrite(BLECharacteristic *pCharacteristic) {
@@ -395,11 +395,9 @@ void adaf1080_loop(void) {
   unsigned long now = micros();
   if (m_ready && (now - m_lastTime >= SAMPLE_TIME)) {
     m_lastTime = now;
-
+    m_sampleCount++;
     float magField = readSensor();
-    m_avgAccum += magField;
-    m_rmsAccum += magField * magField; //RMS is the square root of the average of the squares
-
+    
     if (magField < m_minValue) {
       m_minValue = magField;
     }
@@ -408,10 +406,36 @@ void adaf1080_loop(void) {
       m_maxValue = magField;
     }
 
-    m_sampleCount++;
+    /*
+     * Use double precision for accumulators to prevent "catastrophic cancellation" bug when calculating ACRMS = sqrt(RMS^2 - Average^2)
+     */
+    double dMagField = (double)magField;
+    m_avgAccum += dMagField;
+    m_rmsAccum += dMagField * dMagField;
+
     if (m_sampleCount >= NUM_SAMPLES) {
-      float avg = m_avgAccum / (float)m_sampleCount;
-      float rms = sqrt(m_rmsAccum / (float)m_sampleCount - avg * avg); //Remove DC offset when calculating RMS - more useful for cable detection
+      double dAvg = m_avgAccum / (double)m_sampleCount;
+      double rawRmsSquared = m_rmsAccum / (double)m_sampleCount;
+      double acRmsSquared = rawRmsSquared - dAvg * dAvg; //Remove DC offset when calculating RMS - more useful for cable detection
+      if (acRmsSquared < 0.0f) {
+        /*
+         * Final layer of protection in case "catastrophic cancellation" bug still shows up despite best efforts (using double precision).
+         *
+         * In theory, RMS >= Average, therefore ACRMS = sqrt(RMS^2 - Average^2) should always yield a valid value. Even when no AC field is present,
+         * (RMS^2 - Average^2) = 0 but never becomes negative.
+         *
+         * In practice, in presence of large DC magnetic field, RMS and Average may both be very large and so subject to floating point rounding errors.
+         * (RMS^2 - Average^2) may become negative, and sqrt() returns NaN. This gets even worse because BLE stack internally uses fixed-point numbers
+         * which have no representation for NaN. End result is that NaN becomes INT32_MIN i.e. very large negative number.
+         *
+         * This hack will cause a "wrong" result in this rare edge case, but user seeing 0 is better than INT32_MIN (especially as correct result is ~0 anyway).
+         */
+        acRmsSquared = 0.0f;
+        ERROR("Catastrophic cancellation error detected in calculation of AC RMS");
+      }
+
+      float avg = (float)dAvg;
+      float acRms = (float)sqrt(acRmsSquared);
       float pp = m_maxValue - m_minValue; //Peak-to-peak is the difference between largest and smallest values
 
       float pk; //Peak is the difference between the largest peak (+ve or -ve) and the average
@@ -423,7 +447,7 @@ void adaf1080_loop(void) {
 
       m_saturatedWrapper.writeValue(isSensorSaturated());
       m_avgWrapper.writeValue(avg);
-      m_rmsWrapper.writeValue(rms);
+      m_rmsWrapper.writeValue(acRms);
       m_pkWrapper.writeValue(pk);
       m_ppWrapper.writeValue(pp);
       m_minWrapper.writeValue(m_minValue);
