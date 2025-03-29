@@ -145,6 +145,7 @@ static BLEWrapper m_maxWrapper(&m_maxCharacteristic, MAX_NAME, MAGFIELD_FORMAT, 
 
 static unsigned long m_lastTime;
 static bool m_ready = false;
+static volatile bool m_requestCalibration = false;
 static int32_t m_offsetCorrection = 0; //Offset correction factor measured in ADC counts
 static float m_reportedOffset = 0.0f; //Actual sensor offset in uTesla (only used for reporting)
 
@@ -169,10 +170,7 @@ class CalibrateCallbacks : public BLECharacteristicCallbacks {
 
     uint8_t *pData = pCharacteristic->getData();
     if (pData[0]) { //Client writes '1' to start calibration
-      calibrateSensor();
-      uint8_t newVal = 0;
-      pCharacteristic->setValue(&newVal, 1); //Set value back to '0' when calibration is complete
-      pCharacteristic->notify();
+      m_requestCalibration = true; //Callback runs in different thread. Can't run calibration from here for thread safety so request main thread to do it instead
     }
   }
 };
@@ -388,6 +386,14 @@ bool adaf1080_addService(BLEServer *pServer) {
 }
 
 void adaf1080_loop(void) {
+  if (m_ready && m_requestCalibration) { //BTC_TASK thread has requsted calibration
+    m_requestCalibration = false;
+    calibrateSensor();
+    uint8_t temp = 0;
+    m_calibrateCharacteristic.setValue(&temp, 1); //Set value back to '0' when calibration is complete
+    m_calibrateCharacteristic.notify();
+  }
+
   unsigned long now = micros();
   if (m_ready && (now - m_lastTime >= SAMPLE_TIME)) {
     m_lastTime = now;
