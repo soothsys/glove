@@ -48,8 +48,8 @@ typedef struct {
  *
  * where    Bsense = magnetic field strength
  *         Sdevice = device sensitivity
- *                 = 183 mV/mT (for +/-8mT range, gain = 80)
- *                 = 0.000183 V/uT
+ *                 = 199.25 mV/mT (for +/-8mT range, gain = 80)
+ *                 = 0.00019925 V/uT
  *               n = ADC bit depth
  *                 = 18 bits
  *         Midcode = 2^(n - 1)
@@ -57,10 +57,10 @@ typedef struct {
  *                 = 131072
  *
  * Therefore   K = 5 / (Sdevice * 2^n)
- *               = 5 / (0.000183 * 2^18)
- *               = 0.104227
+ *               = 5 / (0.00019925 * 2^18)
+ *               = 0.095726
  */
-#define ADAF1080_SCALE_FACTOR 0.104227F
+#define ADAF1080_SCALE_FACTOR 0.095726F
 #define AD4002_MIDCODE 131072
 
 #define SPI_CLOCK_RATE 1000000 //1MHz
