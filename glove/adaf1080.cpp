@@ -72,45 +72,49 @@ typedef struct {
 #define PIN_FLIP_DRV 33
 #define PIN_CNV A5
 
+/*
+ * Diag coil produces approx. -18uT field strength based on empirical measurments. This is less than datasheet value of 22.8uT (for 100mA drive).
+ * Upper and lower limits allow for noise, as 18uT is close to noise floor even with averaging.
+ */
+#define DIAG_FIELD_MIN -20.0F
+#define DIAG_FIELD_MAX -16.0F
+
 #define STARTUP_DELAY 50 //ms
 #define FLIP_DELAY 1 //ms
+#define DIAG_DELAY 100 //us
 #define SAMPLE_TIME 4000 //4000us = 250Hz
 #define NUM_SAMPLES 250 //Calculate statistics every second
 #define CAL_AVERAGE_SAMPLES 32 //Average over multiple samples during calibration process to reduce noise
+#define SAT_AVERAGE_SAMPLES 8
 
 #define BLE_INST_ID 0
-#define NUM_CHARACTERISTICS 10
+#define NUM_CHARACTERISTICS 9
 
 #define BLE_SERVICE_UUID BLEUUID("7749eb1b-2b16-4d32-8422-e792dae7adb8")
 #define CALIBRATE_UUID BLEUUID("0b541f35-34c1-4769-b206-8deaaa7e0922")
-#define DIAG_SET_UUID BLEUUID("15e53a14-9e4c-489b-ab8c-98569758764d")
-#define DIAG_GET_UUID BLEUUID("1de21519-a563-428b-9e18-b033f8bd7348")
-#define OFFSET_UUID BLEUUID("3c510d3d-3d82-4fd9-9dd3-da928916662b")
-#define AVG_UUID BLEUUID("3c70df7e-3b42-4e52-bbdb-ff47728bec8a")
-#define RMS_UUID BLEUUID("5fd8a802-0645-492f-bb0e-541972833add")
-#define PK_UUID BLEUUID("949b3518-826e-4a4b-b638-fea08b01e1a0")
-#define PP_UUID BLEUUID("9c60f79f-18e0-4343-967e-b6474b305c8b")
-#define MIN_UUID BLEUUID("eea8f3a7-d5b1-4454-8e5b-44ce3c0fb372")
+#define SATURATED_UUID BLEUUID("3c510d3d-3d82-4fd9-9dd3-da928916662b")
+#define OFFSET_UUID BLEUUID("3c70df7e-3b42-4e52-bbdb-ff47728bec8a")
+#define AVG_UUID BLEUUID("5fd8a802-0645-492f-bb0e-541972833add")
+#define RMS_UUID BLEUUID("949b3518-826e-4a4b-b638-fea08b01e1a0")
+#define PK_UUID BLEUUID("9c60f79f-18e0-4343-967e-b6474b305c8b")
+#define PP_UUID BLEUUID("eea8f3a7-d5b1-4454-8e5b-44ce3c0fb372")
+#define MIN_UUID BLEUUID("f3303f8c-89f4-4020-9912-de79a9617da1")
 #define MAX_UUID BLEUUID("fc13446a-8329-4a00-8b74-6119d1129485")
 
 #define CALIBRATE_FORMAT BLE2904::FORMAT_BOOLEAN
-#define DIAG_SET_FORMAT BLE2904::FORMAT_BOOLEAN
-#define DIAG_GET_FORMAT BLE2904::FORMAT_BOOLEAN
+#define SATURATED_FORMAT BLE2904::FORMAT_BOOLEAN
 #define MAGFIELD_FORMAT BLE2904::FORMAT_SINT32
 
 #define CALIBRATE_EXPONENT 0
-#define DIAG_SET_EXPONENT 0
-#define DIAG_GET_EXPONENT 0
+#define SATURATED_EXPONENT 0
 #define MAGFIELD_EXPONENT -2 //10nT precision
 
 #define CALIBRATE_UNIT BLEUnit::Unitless
-#define DIAG_SET_UNIT BLEUnit::Unitless
-#define DIAG_GET_UNIT BLEUnit::Unitless
+#define SATURATED_UNIT BLEUnit::Unitless
 #define MAGFIELD_UNIT BLEUnit::uTesla
 
 #define CALIBRATE_NAME "Calibrate sensor"
-#define DIAG_SET_NAME "Diag coil on/off"
-#define DIAG_GET_NAME "Diag coil status"
+#define SATURATED_NAME "Sensor saturated"
 #define OFFSET_NAME "Sensor offset correction"
 #define AVG_NAME "Average (DC)"
 #define RMS_NAME "Root mean square (AC RMS)"
@@ -120,8 +124,7 @@ typedef struct {
 #define MAX_NAME "Maximum"
 
 static BLECharacteristic m_calibrateCharacteristic(CALIBRATE_UUID, BLECharacteristic::PROPERTY_READ | BLECharacteristic::PROPERTY_WRITE | BLECharacteristic::PROPERTY_NOTIFY);
-static BLECharacteristic m_diagSetCharacteristic(DIAG_SET_UUID, BLECharacteristic::PROPERTY_READ | BLECharacteristic::PROPERTY_WRITE | BLECharacteristic::PROPERTY_NOTIFY);
-static BLECharacteristic m_diagGetCharacteristic(DIAG_GET_UUID, BLECharacteristic::PROPERTY_READ | BLECharacteristic::PROPERTY_NOTIFY);
+static BLECharacteristic m_saturatedCharacteristic(SATURATED_UUID, BLECharacteristic::PROPERTY_READ | BLECharacteristic::PROPERTY_NOTIFY);
 static BLECharacteristic m_offsetCharacteristic(OFFSET_UUID, BLECharacteristic::PROPERTY_READ | BLECharacteristic::PROPERTY_NOTIFY);
 static BLECharacteristic m_avgCharacteristic(AVG_UUID, BLECharacteristic::PROPERTY_READ | BLECharacteristic::PROPERTY_NOTIFY);
 static BLECharacteristic m_rmsCharacteristic(RMS_UUID, BLECharacteristic::PROPERTY_READ | BLECharacteristic::PROPERTY_NOTIFY);
@@ -131,8 +134,7 @@ static BLECharacteristic m_minCharacteristic(MIN_UUID, BLECharacteristic::PROPER
 static BLECharacteristic m_maxCharacteristic(MAX_UUID, BLECharacteristic::PROPERTY_READ | BLECharacteristic::PROPERTY_NOTIFY);
 
 static BLEWrapper m_calibrateWrapper(&m_calibrateCharacteristic, CALIBRATE_NAME, CALIBRATE_FORMAT, CALIBRATE_EXPONENT, CALIBRATE_UNIT);
-static BLEWrapper m_diagSetWrapper(&m_diagSetCharacteristic, DIAG_SET_NAME, DIAG_SET_FORMAT, DIAG_SET_EXPONENT, DIAG_SET_UNIT);
-static BLEWrapper m_diagGetWrapper(&m_diagGetCharacteristic, DIAG_GET_NAME, DIAG_GET_FORMAT, DIAG_GET_EXPONENT, DIAG_GET_UNIT);
+static BLEWrapper m_saturatedWrapper(&m_saturatedCharacteristic, SATURATED_NAME, SATURATED_FORMAT, SATURATED_EXPONENT, SATURATED_UNIT);
 static BLEWrapper m_offsetWrapper(&m_offsetCharacteristic, OFFSET_NAME, MAGFIELD_FORMAT, MAGFIELD_EXPONENT, MAGFIELD_UNIT);
 static BLEWrapper m_avgWrapper(&m_avgCharacteristic, AVG_NAME, MAGFIELD_FORMAT, MAGFIELD_EXPONENT, MAGFIELD_UNIT);
 static BLEWrapper m_rmsWrapper(&m_rmsCharacteristic, RMS_NAME, MAGFIELD_FORMAT, MAGFIELD_EXPONENT, MAGFIELD_UNIT);
@@ -143,7 +145,6 @@ static BLEWrapper m_maxWrapper(&m_maxCharacteristic, MAX_NAME, MAGFIELD_FORMAT, 
 
 static unsigned long m_lastTime;
 static bool m_ready = false;
-static bool m_diagCoilOn = false;
 static int32_t m_offsetCorrection = 0; //Offset correction factor measured in ADC counts
 static float m_reportedOffset = 0.0f; //Actual sensor offset in uTesla (only used for reporting)
 
@@ -154,8 +155,6 @@ static float m_avgAccum;
 static float m_rmsAccum;
 
 static void calibrateSensor(void);
-static void diagCoilOn(void);
-static void diagCoilOff(void);
 
 class CalibrateCallbacks : public BLECharacteristicCallbacks {
   void onWrite(BLECharacteristic *pCharacteristic) {
@@ -174,26 +173,6 @@ class CalibrateCallbacks : public BLECharacteristicCallbacks {
       uint8_t newVal = 0;
       pCharacteristic->setValue(&newVal, 1); //Set value back to '0' when calibration is complete
       pCharacteristic->notify();
-    }
-  }
-};
-
-class DiagCallbacks : public BLECharacteristicCallbacks {
-  void onWrite(BLECharacteristic *pCharacteristic) {
-    if (pCharacteristic == NULL) {
-      return;
-    }
-
-    size_t dataLen = pCharacteristic->getLength();
-    if (dataLen < 1) {
-      return;
-    }
-
-    uint8_t *pData = pCharacteristic->getData();
-    if (pData[0]) {
-      diagCoilOn();
-    } else {
-      diagCoilOff();
     }
   }
 };
@@ -260,7 +239,6 @@ static float ad4002_readAverage(int nSamples) {
   int i;
   for (i = 0; i < nSamples; i++) {
     accum += (float)ad4002_readResult();
-    delay(1); //Prevent timing violation
   }
 
   return accum / (float)nSamples;
@@ -279,12 +257,16 @@ static float readSensor(void) {
   return (float)(bipolar - m_offsetCorrection) * ADAF1080_SCALE_FACTOR;
 }
 
+static float readSensorAverage(int nSamples) {
+  float avgAdcCounts = ad4002_readAverage(nSamples);
+  float totalOffset = (float)(AD4002_MIDCODE + m_offsetCorrection);
+  return (avgAdcCounts - totalOffset) * ADAF1080_SCALE_FACTOR;
+}
+
 static void calibrateSensor(void) {
   /*
    * See ADAF1080 datasheet page 27 for details of offset correction
    */
-  Serial.print("ADAF1080: beginning sensor calibration... ");
-
   digitalWrite(PIN_FLIP_DRV, HIGH); //Flip sensor in both directions so that we guarantee at least one flip regardless which direction we started in
   delay(FLIP_DELAY);
   digitalWrite(PIN_FLIP_DRV, LOW);
@@ -300,22 +282,32 @@ static void calibrateSensor(void) {
   m_reportedOffset = fOffsetCorrection * ADAF1080_SCALE_FACTOR; //We now know the sensor offset in raw ADC counts. Convert that back to uTesla for reporting
 
   resetStatistics(); //Previously gathered statistics are now invalid due to change of offset, start from scratch
-  Serial.println("Complete!");
-  Serial.print("ADAF1080: Offset correction factor is now ");
-  Serial.print(m_offsetCorrection);
-  Serial.println(" LSBs");
 }
 
-static void diagCoilOn(void) {
-  Serial.println("Enabling diag coil");
-  digitalWrite(PIN_DIAG_EN, HIGH);
-  m_diagCoilOn = true;
-}
+static bool isSensorSaturated(void) {
+  /*
+   * See EVAL-ADAF1080SGZ board includes a "diagnostic coil" features, which passes a known current through the ADAF1080 IC's leadframe when the DIAG_EN pin is high.
+   * This produces a known magnetic field directly within the sensor package.
+   *
+   * We take a pair of measurements in quick succession - one with the diagnostic coil on, and a second with it off. The difference between these measurements should
+   * be the diagnostic coil field (plus some noise, which is reduced by averaging across multiple samples). If the sensor is functioning properly, this should be a 
+   * close match to the datasheet predicted value.
+   *
+   * If the sensor is saturated, it is no longer responding properly to magnetic fields. We should see that the field strength does not change significantly whether 
+   * the diagnostic coil is on or off.
+   *
+   * See ADAF1080 datasheet page 23 for more details.
+   */
+  digitalWrite(PIN_DIAG_EN, HIGH); //Turn diag coil on
+  delayMicroseconds(DIAG_DELAY);
+  float diagOn = readSensorAverage(SAT_AVERAGE_SAMPLES);
 
-static void diagCoilOff(void) {
-  Serial.println("Disabling diag coil");
-  digitalWrite(PIN_DIAG_EN, LOW);
-  m_diagCoilOn = false;
+  digitalWrite(PIN_DIAG_EN, LOW); //Turn diag coil off
+  delayMicroseconds(DIAG_DELAY);
+  float diagOff = readSensorAverage(SAT_AVERAGE_SAMPLES);
+
+  float diff = diagOn - diagOff;
+  return (diff <= DIAG_FIELD_MIN) || (diff >= DIAG_FIELD_MAX); //If measured field strength change is outside of limits, sensor is likely saturated
 }
 
 bool adaf1080_init(void) {
@@ -378,8 +370,7 @@ bool adaf1080_addService(BLEServer *pServer) {
   }
 
   pService->addCharacteristic(&m_calibrateCharacteristic);
-  pService->addCharacteristic(&m_diagSetCharacteristic);
-  pService->addCharacteristic(&m_diagGetCharacteristic);
+  pService->addCharacteristic(&m_saturatedCharacteristic);
   pService->addCharacteristic(&m_offsetCharacteristic);
   pService->addCharacteristic(&m_avgCharacteristic);
   pService->addCharacteristic(&m_rmsCharacteristic);
@@ -388,14 +379,11 @@ bool adaf1080_addService(BLEServer *pServer) {
   pService->addCharacteristic(&m_minCharacteristic);
   pService->addCharacteristic(&m_maxCharacteristic);
   m_calibrateCharacteristic.setCallbacks(new CalibrateCallbacks());
-  m_diagSetCharacteristic.setCallbacks(new DiagCallbacks());
   pService->start();
 
   uint8_t temp = 0;
   m_calibrateCharacteristic.setValue(&temp, 1);
   m_calibrateCharacteristic.notify();
-  m_diagSetCharacteristic.setValue(&temp, 1);
-  m_diagSetCharacteristic.notify();
   return true;
 }
 
@@ -406,7 +394,7 @@ void adaf1080_loop(void) {
 
     float magField = readSensor();
     m_avgAccum += magField;
-    m_rmsAccum += magField * magField; //RMS is the square-root of the average of the squares
+    m_rmsAccum += magField * magField; //RMS is the square root of the average of the squares
 
     if (magField < m_minValue) {
       m_minValue = magField;
@@ -426,10 +414,10 @@ void adaf1080_loop(void) {
       if (m_maxValue > -m_minValue) {
         pk = m_maxValue - avg;
       } else {
-        pk = -(m_minValue - avg);
+        pk = avg - m_minValue;
       }
 
-      m_diagGetWrapper.writeValue(m_diagCoilOn);
+      m_saturatedWrapper.writeValue(isSensorSaturated());
       m_offsetWrapper.writeValue(m_reportedOffset);
       m_avgWrapper.writeValue(avg);
       m_rmsWrapper.writeValue(rms);
