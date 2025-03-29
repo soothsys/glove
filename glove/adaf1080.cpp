@@ -147,15 +147,12 @@ static unsigned long m_lastTime;
 static bool m_ready = false;
 static volatile bool m_requestCalibration = false;
 static int32_t m_offsetCorrection = 0; //Offset correction factor measured in ADC counts
-static float m_reportedOffset = 0.0f; //Actual sensor offset in uTesla (only used for reporting)
 
 static int m_sampleCount;
 static float m_minValue;
 static float m_maxValue;
 static float m_avgAccum;
 static float m_rmsAccum;
-
-static void calibrateSensor(void);
 
 class CalibrateCallbacks : public BLECharacteristicCallbacks {
   void onWrite(BLECharacteristic *pCharacteristic) {
@@ -261,7 +258,7 @@ static float readSensorAverage(int nSamples) {
   return (avgAdcCounts - totalOffset) * ADAF1080_SCALE_FACTOR;
 }
 
-static void calibrateSensor(void) {
+static float calibrateSensor(void) {
   /*
    * See ADAF1080 datasheet page 27 for details of offset correction
    */
@@ -277,14 +274,14 @@ static void calibrateSensor(void) {
   
   float fOffsetCorrection = posReading - negReading;
   m_offsetCorrection = (int32_t)round(fOffsetCorrection); //AD4002 output is only 18-bit so we don't have to worry about overflowing 32-bit integer
-  m_reportedOffset = fOffsetCorrection * ADAF1080_SCALE_FACTOR; //We now know the sensor offset in raw ADC counts. Convert that back to uTesla for reporting
 
   resetStatistics(); //Previously gathered statistics are now invalid due to change of offset, start from scratch
+  return fOffsetCorrection * ADAF1080_SCALE_FACTOR; //We now know the sensor offset in raw ADC counts. Convert that back to uTesla for reporting
 }
 
 static bool isSensorSaturated(void) {
   /*
-   * See EVAL-ADAF1080SGZ board includes a "diagnostic coil" features, which passes a known current through the ADAF1080 IC's leadframe when the DIAG_EN pin is high.
+   * See EVAL-ADAF1080SGZ board includes a "diagnostic coil" feature, which passes a known current through the ADAF1080 IC's leadframe when the DIAG_EN pin is high.
    * This produces a known magnetic field directly within the sensor package.
    *
    * We take a pair of measurements in quick succession - one with the diagnostic coil on, and a second with it off. The difference between these measurements should
@@ -388,10 +385,11 @@ bool adaf1080_addService(BLEServer *pServer) {
 void adaf1080_loop(void) {
   if (m_ready && m_requestCalibration) { //BTC_TASK thread has requsted calibration
     m_requestCalibration = false;
-    calibrateSensor();
+    float offset = calibrateSensor();
     uint8_t temp = 0;
     m_calibrateCharacteristic.setValue(&temp, 1); //Set value back to '0' when calibration is complete
     m_calibrateCharacteristic.notify();
+    m_offsetWrapper.writeValue(offset);
   }
 
   unsigned long now = micros();
@@ -424,7 +422,6 @@ void adaf1080_loop(void) {
       }
 
       m_saturatedWrapper.writeValue(isSensorSaturated());
-      m_offsetWrapper.writeValue(m_reportedOffset);
       m_avgWrapper.writeValue(avg);
       m_rmsWrapper.writeValue(rms);
       m_pkWrapper.writeValue(pk);
