@@ -67,7 +67,6 @@ typedef struct {
 #define SPI_BIT_ORDER MSBFIRST
 #define SPI_MODE SPI_MODE0
 
-#define PIN_PWR_EN 12
 #define PIN_DIAG_EN 27
 #define PIN_FLIP_DRV 33
 #define PIN_CNV A5
@@ -312,8 +311,6 @@ bool adaf1080_init(void) {
   digitalWrite(PIN_DIAG_EN, LOW); //Turn diag coil off
   pinMode(PIN_CNV, OUTPUT);
   digitalWrite(PIN_CNV, LOW); //CNV should idle low between transactions
-  pinMode(PIN_PWR_EN, OUTPUT);
-  digitalWrite(PIN_PWR_EN, HIGH); //Power on 5V boost converter
 
   delay(STARTUP_DELAY); //Allow boost converter to start
   digitalWrite(PIN_FLIP_DRV, HIGH); //Flip sensor back to positive direction
