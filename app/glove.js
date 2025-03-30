@@ -39,7 +39,6 @@ const supportedServices = new Map([
 	['7749eb1b-2b16-4d32-8422-e792dae7adb8', 'Magnetic Field Sensor']
 ]);
 
-const presInfoCache = new Map();
 const readCharacteristicList = new Map();
 const writeCharacteristicList = new Map();
 const log = new Map();
@@ -96,7 +95,6 @@ function bluetoothConnect() {
 		return;
 	}
 
-	presInfoCache.clear();
 	readCharacteristicList.clear();
 	writeCharacteristicList.clear();
 
@@ -105,30 +103,27 @@ function bluetoothConnect() {
 	navigator.bluetooth.requestDevice({
 		filters: [{ name: DEVICE_NAME }],
 		optionalServices: getSupportedUuids()
-	})
-		.then(device => {
-			console.log('Connected to: ', device.name);
-			statusOk('Connected to ' + device.name);
-			enableButton(bttnLogStart);
-			disableButton(bttnLogStop);
-			device.addEventListener('gattservicedisconnected', onDisconnect);
-			return device.gatt.connect();
-		})
-		.then(gattServer => {
-			bleServer = gattServer;
-			console.log('GATT server connected');
-			return bleServer.getPrimaryServices();
-		})
-		.then(services => initServices(services))
-		.catch(error => {
-			if (bleServer && bleServer.connected) {
-				bleServer.disconnect();
-			}
+	}).then(device => {
+		console.log('Connected to: ', device.name);
+		statusOk('Connected to ' + device.name);
+		enableButton(bttnLogStart);
+		disableButton(bttnLogStop);
+		device.addEventListener('gattservicedisconnected', onDisconnect);
+		return device.gatt.connect();
+	}).then(gattServer => {
+		bleServer = gattServer;
+		console.log('GATT server connected');
+		return bleServer.getPrimaryServices();
+	}).then(services => initServices(services))
+	.catch(error => {
+		if (bleServer && bleServer.connected) {
+			bleServer.disconnect();
+		}
 
-			console.log('Error connecting to Bluetooth device: ', error);
-			statusFail('Error connecting to Bluetooth device');
-			enableButton(bttnConnect);
-		});
+		console.log('Error connecting to Bluetooth device: ', error);
+		statusFail('Error connecting to Bluetooth device');
+		enableButton(bttnConnect);
+	});
 }
 
 function onDisconnect(event) {
@@ -152,9 +147,7 @@ function initServices(services) {
 			console.log('Found service "', serviceName, '" with UUID "', service.uuid, '"');
 
 			const table = showService(service.uuid, serviceName);
-			service.getCharacteristics().then(characteristics => {
-				initCharacteristics(table, serviceName, characteristics);
-			});
+			service.getCharacteristics().then(characteristics => initCharacteristics(table, serviceName, characteristics));
 		} else {
 			console.log('Found unsupported service with UUID "', service.uuid, '"');
 		}
@@ -189,11 +182,11 @@ function initReadCharacteristic(table, serviceName, characteristic, characterist
 	}).then(presDataView => {
 		const presInfo = readPresInfo(presDataView);
 		if (presInfo) {
-			presInfoCache.set(characteristic.uuid, presInfo);
 			characteristic.readValue().then(valDataView => {
 				const characteristicInfo = {
 					name: characteristicName,
 					serviceName: serviceName,
+					presInfo: presInfo,
 					lastEntry: ''
 				};
 
@@ -220,8 +213,8 @@ function readPresInfo(dataView) {
 		console.log('Characteristic presentation descriptor received was in invalid format');
 	} else {
 		const presInfo = {};
-		presInfo.format = dataView.getUint8(0, IS_LITTLE_ENDIAN);
-		presInfo.exponent = dataView.getInt8(1, IS_LITTLE_ENDIAN);
+		presInfo.format = dataView.getUint8(0);
+		presInfo.exponent = dataView.getInt8(1);
 		presInfo.unit = dataView.getUint16(2, IS_LITTLE_ENDIAN);
 		return presInfo;
 	}
@@ -279,13 +272,11 @@ function showWriteCharacteristic(table, uuid, characteristicName) {
 }
 
 function onNotify(event) {
-	if (!presInfoCache.has(event.target.uuid)) {
-		console.log('Presentation info descriptor not recorded for UUID "', event.target.uuid, '"');
+	if (!readCharacteristicList.has(event.target.uuid)) {
+		console.log('Received notification for unknown UUID "', event.target.uuid, '"');
 	} else {
-		const presInfo = presInfoCache.get(event.target.uuid);
-		if (presInfo) {
-			updateVal(event.target.uuid, event.target.value, presInfo);
-		}
+		const charInfo = readCharacteristicList.get(event.target.uuid);
+		updateVal(event.target.uuid, event.target.value, charInfo.presInfo);
 	}
 }
 
@@ -325,7 +316,7 @@ function readValue(dataView, presInfo) {
 
 		case BLE_FORMAT_UINT8:
 			length = 1;
-			decodeFunc = (x) => { return x.getUint8(0, IS_LITTLE_ENDIAN); };
+			decodeFunc = (x) => { return x.getUint8(0); };
 			break;
 
 		case BLE_FORMAT_UINT16:
@@ -446,9 +437,9 @@ function printLog() {
 	readCharacteristicList.forEach((characteristicInfo, uuid, map) => {
 		csv += characteristicInfo.serviceName + ',';
 		line2 += characteristicInfo.name + ',';
-		if (presInfoCache.has(uuid)) {
-			const presInfo = presInfoCache.get(uuid);
-			line3 += getUnitString(presInfo);
+		if (readCharacteristicList.has(uuid)) {
+			const charInfo = readCharacteristicList.get(uuid);
+			line3 += getUnitString(charInfo.presInfo);
 		}
 
 		line3 += ',';
