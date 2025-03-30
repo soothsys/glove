@@ -1,12 +1,10 @@
 /*
- * This file includes code which is redistributed under the following copyright license:
+ * Smart Glove Demo v1.0
  *
- * Rui Santos
- * Complete project details at https://RandomNerdTutorials.com/esp32-ble-server-environmental-sensing-service/
+ * Copyright (C) 2025 Soothsayer Systems Ltd. All rights reserved.
  *
- * Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files. 
- * The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.
-*/
+ * Author: Tom Coates <tom@soothsys.com>
+ */
 
 #define ERR_MODULE_NAME "Core"
 

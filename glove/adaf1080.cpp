@@ -1,4 +1,10 @@
 /*
+ * Smart Glove Demo v1.0
+ *
+ * Copyright (C) 2025 Soothsayer Systems Ltd. All rights reserved.
+ *
+ * Author: Tom Coates <tom@soothsys.com>
+ *
  * This module reads magnetic field strength data from the Analog Devices EVAL-ADAF1080SDZ evaluation board. The board contains:
  *
  *    - The ADAF1080 sensor itself (analog output)

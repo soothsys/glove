@@ -1,3 +1,11 @@
+/*
+ * Smart Glove Demo v1.0
+ *
+ * Copyright (C) 2025 Soothsayer Systems Ltd. All rights reserved.
+ *
+ * Author: Tom Coates <tom@soothsys.com>
+ */
+
 const DEVICE_NAME = 'SmartGlove';
 const IS_LITTLE_ENDIAN = true; //BLE protocol is little endian
 const NAME_DESCRIPTOR_UUID = BluetoothUUID.canonicalUUID('0x2901');

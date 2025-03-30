@@ -1,3 +1,11 @@
+/*
+ * Smart Glove Demo v1.0
+ *
+ * Copyright (C) 2025 Soothsayer Systems Ltd. All rights reserved.
+ *
+ * Author: Tom Coates <tom@soothsys.com>
+ */
+
 #define ERR_MODULE_NAME "BME688"
 
 #include <Wire.h>

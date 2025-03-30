@@ -1,3 +1,11 @@
+/*
+ * Smart Glove Demo v1.0
+ *
+ * Copyright (C) 2025 Soothsayer Systems Ltd. All rights reserved.
+ *
+ * Author: Tom Coates <tom@soothsys.com>
+ */
+
 #include <BLECharacteristic.h>
 #include <BLE2904.h>
 
